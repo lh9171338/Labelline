@@ -224,7 +224,7 @@ class Spherical(Camera):
         else:
             return pts_list
 
-    def interp_line(self, lines, num=None, resolution=0.01):
+    def interp_line(self, lines, num=None, resolution=0.1):
         distorted = lines.reshape((-1, 2))
         undistorted = self.undistort_point(distorted)
         arcs = undistorted.reshape((-1, 2, 3))
@@ -247,7 +247,7 @@ class Spherical(Camera):
 
     def truncate_line(self, lines):
         width = self.image_size[0]
-        pts_list = self.interp_line(lines, resolution=0.01)
+        pts_list = self.interp_line(lines)
         lines = []
         for pts in pts_list:
             dx = abs(pts[:-1, 0] - pts[1:, 0])
