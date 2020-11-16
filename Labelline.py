@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
         self.scale_limit = cfg.scale_limit
         self.line_width = cfg.line_width
         self.point_radius = cfg.point_radius
-        self.point_select_thresh = 2 * self.point_radius if cfg.point_select_thresh is not None else cfg.point_select_thresh
+        self.point_select_thresh = 2 * self.point_radius if cfg.point_select_thresh is None else cfg.point_select_thresh
         self.line_select_thresh = cfg.line_select_thresh
         self.point_vertical_align_thresh = cfg.point_vertical_align_thresh
         self.patterns = cfg.patterns
@@ -192,15 +192,19 @@ class MainWindow(QMainWindow):
                 lines = self.camera.truncate_line(self.lines)
             except:
                 lines = self.lines
-            pts = lines.reshape(-1, 2)
             self.camera.insert_line(image, lines, color=[0, 255, 0], thickness=self.line_width)
+
+            pts = self.lines.reshape(-1, 2)
             for pt in pts:
                 pt = np.int32(np.round(pt))
                 cv2.circle(image, tuple(pt), radius=self.point_radius, color=[0, 0, 255], thickness=-1)
 
             if self.line_index >= 0 and self.endpoint is None:
-                self.camera.insert_line(image, lines[self.line_index:self.line_index + 1], color=[255, 0, 0],
-                                        thickness=self.line_width)
+                try:
+                    lines = self.camera.truncate_line(self.lines[self.line_index:self.line_index + 1])
+                except:
+                    lines = self.lines[self.line_index:self.line_index + 1]
+                self.camera.insert_line(image, lines, color=[255, 0, 0], thickness=self.line_width)
 
         if self.endpoint is not None:
             pt = np.int32(np.round(self.endpoint))
@@ -208,13 +212,12 @@ class MainWindow(QMainWindow):
 
         if self.capture_endpoint is not None:
             pt = np.int32(np.round(self.capture_endpoint))
-            cv2.circle(image, tuple(pt), radius=self.point_radius * 2, color=[255, 0, 255], thickness=-1)
+            cv2.circle(image, tuple(pt), radius=self.point_select_thresh, color=[255, 0, 255], thickness=-1)
 
         image = Image.fromarray(image[:, :, ::-1])
         new_size = (int(round(image.width * self.scale)), int(round(image.height * self.scale)))
         image = image.resize(new_size, Image.BICUBIC)
         pixmap = image.toqpixmap()
-        self.label_Image.resize(image.width, image.height)
         self.label_Image.setPixmap(pixmap)
 
     def OpenDir_Callback(self):
@@ -521,6 +524,8 @@ class MainWindow(QMainWindow):
                 return
 
             pt = np.array([x, y], np.float32)
+            print(pt)
+            print(self.label_Image.size())
             if self.num_endpoints == 0:
                 if len(self.lines) == 0:
                     return

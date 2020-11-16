@@ -8,7 +8,7 @@ init_scale: 1.0
 scale_limit: [0.5, 2.0]
 line_width: 2
 point_radius: 4
-point_select_thresh: None
+point_select_thresh: 6
 line_select_thresh: 5
 point_vertical_align_thresh: 2
 window_size: [1920, 1080]
