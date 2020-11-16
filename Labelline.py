@@ -167,7 +167,7 @@ class MainWindow(QMainWindow):
         self.list_File.setEnabled(False)
         self.text_zoom.setEnabled(False)
 
-        self.OpenDir_Callback()
+        self.label_Image.setEnabled(False)
 
     def set_camera(self):
         if cfg.type == 0:
@@ -218,8 +218,7 @@ class MainWindow(QMainWindow):
         self.label_Image.setPixmap(pixmap)
 
     def OpenDir_Callback(self):
-        # dir = QFileDialog.getExistingDirectory()
-        dir = '../dataset/fyork'
+        dir = QFileDialog.getExistingDirectory()
         if not os.path.isdir(dir):
             return
 
@@ -274,6 +273,8 @@ class MainWindow(QMainWindow):
         self.list_Line.setEnabled(True)
         self.list_File.setEnabled(True)
         self.text_zoom.setEnabled(True)
+
+        self.label_Image.setEnabled(True)
 
     def Save_Callback(self):
         image_file = self.file_list[self.file_index]
