@@ -524,8 +524,6 @@ class MainWindow(QMainWindow):
                 return
 
             pt = np.array([x, y], np.float32)
-            print(pt)
-            print(self.label_Image.size())
             if self.num_endpoints == 0:
                 if len(self.lines) == 0:
                     return
