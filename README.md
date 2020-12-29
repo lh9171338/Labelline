@@ -5,7 +5,7 @@ This repository contains a line segment annotation tool for pinhole, fisheye, an
 ## UI
 
 <p align="center">
-    <img height="23" src="https://github.com/lh9171338/Outline/blob/master/icon.jpg"/>
+    <img height="400" src="https://github.com/lh9171338/Labelline/blob/main/UI.png"/>
 </p> 
 
 ## Requirements
