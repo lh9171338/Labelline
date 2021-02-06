@@ -170,20 +170,23 @@ class MainWindow(QMainWindow):
         self.label_Image.setEnabled(False)
 
     def set_camera(self):
-        if cfg.type == 0:
+        if self.type == 0:
             self.camera = cam.Pinhole()
-        elif cfg.type == 1:
-            image_file = self.file_list[self.file_index]
-            coeff_file = '.'.join(image_file.split('.')[:-1]) + '.yaml'
-            if not os.path.isfile(coeff_file):
-                coeff_file = self.coeff_file
-                if not os.path.isfile(coeff_file):
-                    print(f'{coeff_file} does not exist!')
-                    exit()
+        elif self.type == 1:
             self.camera = cam.Fisheye()
-            self.camera.load_coeff(coeff_file)
         else:
             self.camera = cam.Spherical((self.image.shape[1], self.image.shape[0]))
+
+        if os.path.isfile(self.coeff_file):
+            self.camera.load_coeff(self.coeff_file)
+        else:
+            image_file = self.file_list[self.file_index]
+            coeff_file = '.'.join(image_file.split('.')[:-1]) + '.yaml'
+            if os.path.isfile(coeff_file):
+                self.camera.load_coeff(coeff_file)
+            elif self.type == 1:
+                print(f'{coeff_file} does not exist!')
+                exit()
 
     def plot(self):
         image = self.image.copy()
@@ -282,10 +285,10 @@ class MainWindow(QMainWindow):
     def Save_Callback(self):
         image_file = self.file_list[self.file_index]
         line_file = '.'.join(image_file.split('.')[:-1]) + '.mat'
-        try:
+        if self.camera.coeff:
             K, D = self.camera.coeff['K'], self.camera.coeff['D']
             sio.savemat(line_file, {'lines': self.lines, 'K': K, 'D': D})
-        except:
+        else:
             sio.savemat(line_file, {'lines': self.lines})
 
         # Update Widget
@@ -623,7 +626,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-t', '--type', type=int, choices=[0, 1, 2],
                         help='0: pinhole image, 1: fisheye image, 2: spherical image', required=True)
-    parser.add_argument('-c', '--coeff_file', type=str, help='fisheye camera distortion coefficients file')
+    parser.add_argument('-c', '--coeff_file', type=str, help='camera distortion coefficients file')
     opts = parser.parse_args()
     opts_dict = vars(opts)
     opts_list = []
