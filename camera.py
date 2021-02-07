@@ -30,9 +30,9 @@ class Camera:
     def distort_image(self, image):
         height, width = image.shape[0], image.shape[1]
 
-        distorted = np.mgrid[0:width, 0:height].T.reshape((-1, 2))
+        distorted = np.mgrid[0:width, 0:height].T.reshape(-1, 2)
         undistorted = self.undistort_point(distorted)
-        undistorted = undistorted.reshape((height, width, 2))
+        undistorted = undistorted.reshape(height, width, 2)
         map1 = undistorted[:, :, 0]
         map2 = undistorted[:, :, 1]
         image = cv2.remap(image, map1, map2, cv2.INTER_CUBIC)
@@ -42,9 +42,9 @@ class Camera:
     def undistort_image(self, image):
         height, width = image.shape[0], image.shape[1]
 
-        undistorted = np.mgrid[0:width, 0:height].T.reshape((-1, 2))
+        undistorted = np.mgrid[0:width, 0:height].T.reshape(-1, 2)
         distorted = self.distort_point(undistorted)
-        distorted = distorted.reshape((height, width, 2))
+        distorted = distorted.reshape(height, width, 2)
         map1 = distorted[:, :, 0]
         map2 = distorted[:, :, 1]
         image = cv2.remap(image, map1, map2, cv2.INTER_CUBIC)
@@ -86,7 +86,7 @@ class Pinhole(Camera):
             undistorted[:, 0] = (undistorted[:, 0] - cx) / fx
             undistorted[:, 1] = (undistorted[:, 1] - cy) / fy
             undistorted = np.hstack((undistorted, np.ones((undistorted.shape[0], 1), np.float32)))
-            distorted = cv2.projectPoints(undistorted.reshape((1, -1, 3)), (0, 0, 0), (0, 0, 0), K, D)[0].reshape((-1, 2))
+            distorted = cv2.projectPoints(undistorted.reshape(-1, 1, 3), (0, 0, 0), (0, 0, 0), K, D)[0].reshape(-1, 2)
         else:
             distorted = undistorted
 
@@ -97,16 +97,16 @@ class Pinhole(Camera):
 
         if self.coeff is not None:
             K, D = self.coeff['K'], self.coeff['D']
-            undistorted = cv2.undistortPoints(distorted.reshape((-1, 1, 2)), K, D, R=None, P=K).reshape((-1, 2))
+            undistorted = cv2.undistortPoints(distorted.reshape(-1, 1, 2), K, D, R=None, P=K).reshape(-1, 2)
         else:
             undistorted = distorted
 
         return undistorted
 
-    def interp_line(self, lines, num=None, resolution=1.0):
-        distorted = lines.reshape((-1, 2))
+    def interp_line(self, lines, num=None, resolution=0.01):
+        distorted = lines.reshape(-1, 2)
         undistorted = self.undistort_point(distorted)
-        lines = undistorted.reshape((-1, 2, 2))
+        lines = undistorted.reshape(-1, 2, 2)
 
         pts_list = []
         for line in lines:
@@ -143,7 +143,7 @@ class Fisheye(Camera):
 
         undistorted[:, 0] = (undistorted[:, 0] - cx) / fx
         undistorted[:, 1] = (undistorted[:, 1] - cy) / fy
-        distorted = cv2.fisheye.distortPoints(undistorted.reshape((1, -1, 2)), K, D).reshape((-1, 2))
+        distorted = cv2.fisheye.distortPoints(undistorted.reshape(-1, 1, 2), K, D).reshape(-1, 2)
 
         return distorted
 
@@ -151,14 +151,14 @@ class Fisheye(Camera):
         distorted = distorted.copy().astype(np.float32)
 
         K, D = self.coeff['K'], self.coeff['D']
-        undistorted = cv2.fisheye.undistortPoints(distorted.reshape((1, -1, 2)), K, D, P=K).reshape((-1, 2))
+        undistorted = cv2.fisheye.undistortPoints(distorted.reshape(-1, 1, 2), K, D, P=K).reshape(-1, 2)
 
         return undistorted
 
     def interp_line(self, lines, num=None, resolution=0.01):
-        distorted = lines.reshape((-1, 2))
+        distorted = lines.reshape(-1, 2)
         undistorted = self.undistort_point(distorted)
-        lines = undistorted.reshape((-1, 2, 2))
+        lines = undistorted.reshape(-1, 2, 2)
 
         pts_list = []
         for line in lines:
@@ -178,6 +178,22 @@ class Fisheye(Camera):
         super().insert_line(image, pts_list, color, thickness)
 
         return image
+
+    def truncate_line(self, lines, image_size):
+        width, height = image_size[0], image_size[1]
+
+        pts_list = self.interp_line(lines)
+        lines_list = []
+        for pts in pts_list:
+            mask = np.logical_and(np.logical_and(pts[:, 0] >= 0, pts[:, 0] < width),
+                                  np.logical_and(pts[:, 1] >= 0, pts[:, 1] < height)).astype(np.int)
+            mask1 = np.concatenate((mask[:1], mask[1:] - mask[:-1])) == 1
+            mask2 = np.concatenate((mask[:-1] - mask[1:], mask[-1:])) == 1
+            lines = np.hstack((pts[mask1][:, None], pts[mask2][:, None]))
+            lines_list.append(lines)
+        lines = np.concatenate(lines_list)
+
+        return lines
 
 
 class Spherical(Camera):
@@ -210,7 +226,7 @@ class Spherical(Camera):
             undistorted[mask, 2] = -undistorted[mask, 2]
             undistorted = undistorted / (undistorted[:, 2:] + np.finfo(np.float32).eps)
             undistorted = undistorted[:, :2]
-            distorted = cv2.fisheye.distortPoints(undistorted.reshape((1, -1, 2)), K, D).reshape((-1, 2))
+            distorted = cv2.fisheye.distortPoints(undistorted.reshape(-1, 1, 2), K, D).reshape(-1, 2)
             x = (distorted[:, 0] - cx) / cx
             y = (distorted[:, 1] - cy) / cy
             theta = np.arctan2(y, x)
@@ -259,7 +275,7 @@ class Spherical(Camera):
             x = r * np.cos(theta) * cx + cx
             y = r * np.sin(theta) * cy + cy
             distorted = np.hstack((x[:, None], y[:, None]))
-            undistorted = cv2.fisheye.undistortPoints(distorted.reshape((1, -1, 2)), K, D).reshape((-1, 2))
+            undistorted = cv2.fisheye.undistortPoints(distorted.reshape(-1, 1, 2), K, D).reshape(-1, 2)
             undistorted = np.hstack((undistorted, np.ones((undistorted.shape[0], 1), np.float32)))
             undistorted = undistorted / np.linalg.norm(undistorted, axis=1, keepdims=True)
             undistorted[mask, 0] = -undistorted[mask, 0]
@@ -277,7 +293,7 @@ class Spherical(Camera):
             normal /= np.linalg.norm(normal)
             angle = np.arccos(normal[2])
             axes = np.array([-normal[1], normal[0], 0])
-            axes /= max(np.linalg.norm(axes), np.finfo(np.float32).eps)
+            axes /= max(np.linalg.norm(axes), 1e-9)
             rotation_vector = angle * axes
             rotation_matrix, _ = cv2.Rodrigues(rotation_vector)
             pt1 = np.matmul(rotation_matrix.T, pt1[:, None]).flatten()
@@ -299,9 +315,9 @@ class Spherical(Camera):
             return pts_list
 
     def interp_line(self, lines, num=None, resolution=0.01):
-        distorted = lines.reshape((-1, 2))
+        distorted = lines.reshape(-1, 2)
         undistorted = self.undistort_point(distorted)
-        arcs = undistorted.reshape((-1, 2, 3))
+        arcs = undistorted.reshape(-1, 2, 3)
         undistorted_list = self.interp_arc(arcs, num, resolution)
         distorted_list = []
         for undistorted in undistorted_list:
