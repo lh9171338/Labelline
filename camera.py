@@ -76,7 +76,7 @@ class Pinhole(Camera):
         self.coeff = coeff
 
     def distort_point(self, undistorted):
-        undistorted = undistorted.copy().astype(np.float32)
+        undistorted = undistorted.copy().astype(np.float64)
 
         if self.coeff is not None:
             K, D = self.coeff['K'], self.coeff['D']
@@ -85,19 +85,19 @@ class Pinhole(Camera):
 
             undistorted[:, 0] = (undistorted[:, 0] - cx) / fx
             undistorted[:, 1] = (undistorted[:, 1] - cy) / fy
-            undistorted = np.hstack((undistorted, np.ones((undistorted.shape[0], 1), np.float32)))
-            distorted = cv2.projectPoints(undistorted.reshape(-1, 1, 3), (0, 0, 0), (0, 0, 0), K, D)[0].reshape(-1, 2)
+            undistorted = np.hstack((undistorted, np.ones((undistorted.shape[0], 1), np.float64)))
+            distorted = cv2.projectPoints(undistorted.reshape(1, -1, 3), (0, 0, 0), (0, 0, 0), K, D)[0].reshape(-1, 2)
         else:
             distorted = undistorted
 
         return distorted
 
     def undistort_point(self, distorted):
-        distorted = distorted.copy().astype(np.float32)
+        distorted = distorted.copy().astype(np.float64)
 
         if self.coeff is not None:
             K, D = self.coeff['K'], self.coeff['D']
-            undistorted = cv2.undistortPoints(distorted.reshape(-1, 1, 2), K, D, R=None, P=K).reshape(-1, 2)
+            undistorted = cv2.undistortPoints(distorted.reshape(1, -1, 2), K, D, R=None, P=K).reshape(-1, 2)
         else:
             undistorted = distorted
 
@@ -135,7 +135,7 @@ class Fisheye(Camera):
         self.coeff = coeff
 
     def distort_point(self, undistorted):
-        undistorted = undistorted.copy().astype(np.float32)
+        undistorted = undistorted.copy().astype(np.float64)
 
         K, D = self.coeff['K'], self.coeff['D']
         fx, fy = K[0, 0], K[1, 1]
@@ -143,15 +143,15 @@ class Fisheye(Camera):
 
         undistorted[:, 0] = (undistorted[:, 0] - cx) / fx
         undistorted[:, 1] = (undistorted[:, 1] - cy) / fy
-        distorted = cv2.fisheye.distortPoints(undistorted.reshape(-1, 1, 2), K, D).reshape(-1, 2)
+        distorted = cv2.fisheye.distortPoints(undistorted.reshape(1, -1, 2), K, D).reshape(-1, 2)
 
         return distorted
 
     def undistort_point(self, distorted):
-        distorted = distorted.copy().astype(np.float32)
+        distorted = distorted.copy().astype(np.float64)
 
         K, D = self.coeff['K'], self.coeff['D']
-        undistorted = cv2.fisheye.undistortPoints(distorted.reshape(-1, 1, 2), K, D, P=K).reshape(-1, 2)
+        undistorted = cv2.fisheye.undistortPoints(distorted.reshape(1, -1, 2), K, D, P=K).reshape(-1, 2)
 
         return undistorted
 
@@ -206,15 +206,15 @@ class Spherical(Camera):
         #     assert width == 2 * height, 'width must be 2 * height'
         #     cx = cy = (height - 1.0) / 2.0
         #     fx, fy = cx * 2.0 / np.pi, cy * 2.0 / np.pi
-        #     K = np.array([[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], np.float32)
-        #     D = np.array([0.0, 0.0, 0.0, 0.0], np.float32)
+        #     K = np.array([[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], np.float64)
+        #     D = np.array([0.0, 0.0, 0.0, 0.0], np.float64)
         #     self.coeff = {'K': K, 'D': D}
         # else:
         #     self.coeff = coeff
         self.coeff = coeff
 
     def distort_point(self, undistorted):
-        undistorted = undistorted.copy().astype(np.float32)
+        undistorted = undistorted.copy().astype(np.float64)
         width, height = self.image_size[0], self.image_size[1]
 
         if self.coeff is not None:
@@ -224,9 +224,9 @@ class Spherical(Camera):
             mask = undistorted[:, 2] < 0
             undistorted[mask, 0] = -undistorted[mask, 0]
             undistorted[mask, 2] = -undistorted[mask, 2]
-            undistorted = undistorted / (undistorted[:, 2:] + np.finfo(np.float32).eps)
+            undistorted = undistorted / (undistorted[:, 2:] + np.finfo(np.float64).eps)
             undistorted = undistorted[:, :2]
-            distorted = cv2.fisheye.distortPoints(undistorted.reshape(-1, 1, 2), K, D).reshape(-1, 2)
+            distorted = cv2.fisheye.distortPoints(undistorted.reshape(1, -1, 2), K, D).reshape(-1, 2)
             x = (distorted[:, 0] - cx) / cx
             y = (distorted[:, 1] - cy) / cy
             theta = np.arctan2(y, x)
@@ -250,7 +250,7 @@ class Spherical(Camera):
         return distorted
 
     def undistort_point(self, distorted):
-        distorted = distorted.copy().astype(np.float32)
+        distorted = distorted.copy().astype(np.float64)
         width, height = self.image_size[0], self.image_size[1]
 
         u, v = distorted[:, 0], distorted[:, 1]
@@ -275,8 +275,8 @@ class Spherical(Camera):
             x = r * np.cos(theta) * cx + cx
             y = r * np.sin(theta) * cy + cy
             distorted = np.hstack((x[:, None], y[:, None]))
-            undistorted = cv2.fisheye.undistortPoints(distorted.reshape(-1, 1, 2), K, D).reshape(-1, 2)
-            undistorted = np.hstack((undistorted, np.ones((undistorted.shape[0], 1), np.float32)))
+            undistorted = cv2.fisheye.undistortPoints(distorted.reshape(1, -1, 2), K, D).reshape(-1, 2)
+            undistorted = np.hstack((undistorted, np.ones((undistorted.shape[0], 1), np.float64)))
             undistorted = undistorted / np.linalg.norm(undistorted, axis=1, keepdims=True)
             undistorted[mask, 0] = -undistorted[mask, 0]
             undistorted[mask, 2] = -undistorted[mask, 2]
@@ -293,7 +293,7 @@ class Spherical(Camera):
             normal /= np.linalg.norm(normal)
             angle = np.arccos(normal[2])
             axes = np.array([-normal[1], normal[0], 0])
-            axes /= max(np.linalg.norm(axes), 1e-9)
+            axes /= max(np.linalg.norm(axes), np.finfo(np.float64).eps)
             rotation_vector = angle * axes
             rotation_matrix, _ = cv2.Rodrigues(rotation_vector)
             pt1 = np.matmul(rotation_matrix.T, pt1[:, None]).flatten()
