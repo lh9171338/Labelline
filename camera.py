@@ -33,8 +33,8 @@ class Camera:
         distorted = np.mgrid[0:width, 0:height].T.reshape(-1, 2)
         undistorted = self.undistort_point(distorted)
         undistorted = undistorted.reshape(height, width, 2)
-        map1 = undistorted[:, :, 0]
-        map2 = undistorted[:, :, 1]
+        map1 = undistorted[:, :, 0].astype(np.float32)
+        map2 = undistorted[:, :, 1].astype(np.float32)
         image = cv2.remap(image, map1, map2, cv2.INTER_CUBIC)
 
         return image
@@ -45,8 +45,8 @@ class Camera:
         undistorted = np.mgrid[0:width, 0:height].T.reshape(-1, 2)
         distorted = self.distort_point(undistorted)
         distorted = distorted.reshape(height, width, 2)
-        map1 = distorted[:, :, 0]
-        map2 = distorted[:, :, 1]
+        map1 = distorted[:, :, 0].astype(np.float32)
+        map2 = distorted[:, :, 1].astype(np.float32)
         image = cv2.remap(image, map1, map2, cv2.INTER_CUBIC)
 
         return image
