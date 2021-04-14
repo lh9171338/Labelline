@@ -5,13 +5,14 @@ patterns: ['*.png', '*.jpg']
 # Parameters
 decimal_precision: 3
 init_scale: 1.0
-scale_limit: [0.5, 2.0]
+scale_limit: [0.5, 4.0]
 line_width: 2
 point_radius: 4
 point_select_thresh: 6
 line_select_thresh: 5
 point_vertical_align_thresh: 2
 window_size: [1920, 1080]
+default_image_size: [1024, 1024]
 
 # Shortcuts
 menu_OpenDir_shortcut: 'Ctrl+O'

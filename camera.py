@@ -27,22 +27,33 @@ class Camera:
     def undistort_point(self, distorted):
         pass
 
-    def distort_image(self, image):
+    def distort_image(self, image, transform=None):
+        if transform is None:
+            transform = [0.0, 0.0, 1.0, 1.0]
+        tx, ty, sx, sy = transform[0], transform[1], transform[2], transform[3]
+
         height, width = image.shape[0], image.shape[1]
 
-        distorted = np.mgrid[0:width, 0:height].T.reshape(-1, 2)
+        distorted = np.mgrid[0:width, 0:height].T.reshape(-1, 2).astype(np.float64)
         undistorted = self.undistort_point(distorted)
         undistorted = undistorted.reshape(height, width, 2)
-        map1 = undistorted[:, :, 0].astype(np.float32)
-        map2 = undistorted[:, :, 1].astype(np.float32)
+        map1 = (undistorted[:, :, 0].astype(np.float32) - tx) / sx
+        map2 = (undistorted[:, :, 1].astype(np.float32) - ty) / sy
+
         image = cv2.remap(image, map1, map2, cv2.INTER_CUBIC)
 
         return image
 
-    def undistort_image(self, image):
+    def undistort_image(self, image, transform=None):
+        if transform is None:
+            transform = [0.0, 0.0, 1.0, 1.0]
+        tx, ty, sx, sy = transform[0], transform[1], transform[2], transform[3]
+
         height, width = image.shape[0], image.shape[1]
 
-        undistorted = np.mgrid[0:width, 0:height].T.reshape(-1, 2)
+        undistorted = np.mgrid[0:width, 0:height].T.reshape(-1, 2).astype(np.float64)
+        undistorted[:, 0] = undistorted[:, 0] * sx + tx
+        undistorted[:, 1] = undistorted[:, 1] * sy + ty
         distorted = self.distort_point(undistorted)
         distorted = distorted.reshape(height, width, 2)
         map1 = distorted[:, :, 0].astype(np.float32)
@@ -53,6 +64,37 @@ class Camera:
 
     def interp_line(self, lines, num=None, resolution=1.0):
         pass
+
+    def interp_arc(self, arcs, num=None, resolution=0.01):
+        resolution *= np.pi / 180.0
+
+        pts_list = []
+        for arc in arcs:
+            pt1, pt2 = arc[0], arc[1]
+            normal = np.cross(pt1, pt2)
+            normal /= np.linalg.norm(normal)
+            angle = np.arccos(normal[2])
+            axes = np.array([-normal[1], normal[0], 0])
+            axes /= max(np.linalg.norm(axes), np.finfo(np.float64).eps)
+            rotation_vector = angle * axes
+            rotation_matrix, _ = cv2.Rodrigues(rotation_vector)
+            pt1 = np.matmul(rotation_matrix.T, pt1[:, None]).flatten()
+            pt2 = np.matmul(rotation_matrix.T, pt2[:, None]).flatten()
+            min_angle = np.arctan2(pt1[1], pt1[0])
+            max_angle = np.arctan2(pt2[1], pt2[0])
+            if max_angle < min_angle:
+                max_angle += 2 * np.pi
+
+            K = int(round((max_angle - min_angle) / resolution) + 1) if num is None else num
+            angles = np.linspace(min_angle, max_angle, K)
+            pts = np.hstack((np.cos(angles)[:, None], np.sin(angles)[:, None], np.zeros((K, 1))))
+            pts = np.matmul(rotation_matrix, pts.T).T
+            pts_list.append(pts)
+
+        if num is not None:
+            return np.asarray(pts_list)
+        else:
+            return pts_list
 
     def remove_line(self, lines, thresh):
         distances = np.max(np.abs(lines[:, 0] - lines[:, 1]), axis=-1)
@@ -158,20 +200,22 @@ class Fisheye(Camera):
     def interp_line(self, lines, num=None, resolution=0.01):
         distorted = lines.reshape(-1, 2)
         undistorted = self.undistort_point(distorted)
-        lines = undistorted.reshape(-1, 2, 2)
+        undistorted = np.hstack((undistorted, np.ones((undistorted.shape[0], 1), np.float64)))
+        undistorted = undistorted / np.linalg.norm(undistorted, axis=1, keepdims=True)
 
-        pts_list = []
-        for line in lines:
-            K = int(round(max(abs(line[-1] - line[0])) / resolution)) + 1 if num is None else num
-            lambda_ = np.linspace(0, 1, K)[:, None]
-            pts = line[1] * lambda_ + line[0] * (1 - lambda_)
-            pts = self.distort_point(pts)
-            pts_list.append(pts)
+        arcs = undistorted.reshape(-1, 2, 3)
+        undistorted_list = self.interp_arc(arcs, num, resolution)
+        distorted_list = []
+        for undistorted in undistorted_list:
+            undistorted = undistorted / (undistorted[:, 2:] + np.finfo(np.float64).eps)
+            undistorted = undistorted[:, :2]
+            distorted = self.distort_point(undistorted)
+            distorted_list.append(distorted)
 
         if num is not None:
-            return np.asarray(pts_list)
+            return np.asarray(distorted_list)
         else:
-            return pts_list
+            return distorted_list
 
     def insert_line(self, image, lines, color, thickness=0):
         pts_list = self.interp_line(lines)
@@ -197,46 +241,21 @@ class Fisheye(Camera):
 
 
 class Spherical(Camera):
-    def __init__(self, image_size, coeff=None):
+    def __init__(self, image_size):
         super().__init__()
 
         self.image_size = image_size
-        # if coeff is None:
-        #     width, height = self.image_size[0], self.image_size[1]
-        #     assert width == 2 * height, 'width must be 2 * height'
-        #     cx = cy = (height - 1.0) / 2.0
-        #     fx, fy = cx * 2.0 / np.pi, cy * 2.0 / np.pi
-        #     K = np.array([[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], np.float64)
-        #     D = np.array([0.0, 0.0, 0.0, 0.0], np.float64)
-        #     self.coeff = {'K': K, 'D': D}
-        # else:
-        #     self.coeff = coeff
-        self.coeff = coeff
+        width, height = self.image_size[0], self.image_size[1]
+        assert width == 2 * height, 'width must be 2 * height'
+        cx = cy = (height - 1.0) / 2.0
+        fx, fy = cx * 2.0 / np.pi, cy * 2.0 / np.pi
+        K = np.array([[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], np.float64)
+        D = np.array([[0.0, 0.0, 0.0, 0.0]], np.float64)
+        self.coeff = {'K': K, 'D': D}
 
     def distort_point(self, undistorted):
         undistorted = undistorted.copy().astype(np.float64)
         width, height = self.image_size[0], self.image_size[1]
-
-        if self.coeff is not None:
-            K, D = self.coeff['K'], self.coeff['D']
-            cx = cy = (height - 1.0) / 2.0
-
-            mask = undistorted[:, 2] < 0
-            undistorted[mask, 0] = -undistorted[mask, 0]
-            undistorted[mask, 2] = -undistorted[mask, 2]
-            undistorted = undistorted / (undistorted[:, 2:] + np.finfo(np.float64).eps)
-            undistorted = undistorted[:, :2]
-            distorted = cv2.fisheye.distortPoints(undistorted.reshape(1, -1, 2), K, D).reshape(-1, 2)
-            x = (distorted[:, 0] - cx) / cx
-            y = (distorted[:, 1] - cy) / cy
-            theta = np.arctan2(y, x)
-            phi = np.sqrt(x ** 2 + y ** 2) * np.pi / 2.0
-            x = np.sin(phi) * np.cos(theta)
-            y = np.sin(phi) * np.sin(theta)
-            z = np.cos(phi)
-            undistorted = np.hstack((x[:, None], y[:, None], z[:, None]))
-            undistorted[mask, 0] = -undistorted[mask, 0]
-            undistorted[mask, 2] = -undistorted[mask, 2]
 
         x, y, z = undistorted[:, 0], undistorted[:, 1], undistorted[:, 2]
         lat = np.pi - np.arccos(y)
@@ -261,58 +280,7 @@ class Spherical(Camera):
         z = np.sin(lat) * np.sin(lon)
         undistorted = np.hstack((x[:, None], y[:, None], z[:, None]))
 
-        if self.coeff is not None:
-            K, D = self.coeff['K'], self.coeff['D']
-            cx = cy = (height - 1.0) / 2.0
-
-            mask = undistorted[:, 2] < 0
-            undistorted[mask, 0] = -undistorted[mask, 0]
-            undistorted[mask, 2] = -undistorted[mask, 2]
-            x, y, z = undistorted[:, 0], undistorted[:, 1], undistorted[:, 2]
-            theta = np.arctan2(y, x)
-            phi = np.arccos(z)
-            r = phi * 2.0 / np.pi
-            x = r * np.cos(theta) * cx + cx
-            y = r * np.sin(theta) * cy + cy
-            distorted = np.hstack((x[:, None], y[:, None]))
-            undistorted = cv2.fisheye.undistortPoints(distorted.reshape(1, -1, 2), K, D).reshape(-1, 2)
-            undistorted = np.hstack((undistorted, np.ones((undistorted.shape[0], 1), np.float64)))
-            undistorted = undistorted / np.linalg.norm(undistorted, axis=1, keepdims=True)
-            undistorted[mask, 0] = -undistorted[mask, 0]
-            undistorted[mask, 2] = -undistorted[mask, 2]
-
         return undistorted
-
-    def interp_arc(self, arcs, num=None, resolution=0.01):
-        resolution *= np.pi / 180.0
-
-        pts_list = []
-        for arc in arcs:
-            pt1, pt2 = arc[0], arc[1]
-            normal = np.cross(pt1, pt2)
-            normal /= np.linalg.norm(normal)
-            angle = np.arccos(normal[2])
-            axes = np.array([-normal[1], normal[0], 0])
-            axes /= max(np.linalg.norm(axes), np.finfo(np.float64).eps)
-            rotation_vector = angle * axes
-            rotation_matrix, _ = cv2.Rodrigues(rotation_vector)
-            pt1 = np.matmul(rotation_matrix.T, pt1[:, None]).flatten()
-            pt2 = np.matmul(rotation_matrix.T, pt2[:, None]).flatten()
-            min_angle = np.arctan2(pt1[1], pt1[0])
-            max_angle = np.arctan2(pt2[1], pt2[0])
-            if max_angle < min_angle:
-                max_angle += 2 * np.pi
-
-            K = int(round((max_angle - min_angle) / resolution) + 1) if num is None else num
-            angles = np.linspace(min_angle, max_angle, K)
-            pts = np.hstack((np.cos(angles)[:, None], np.sin(angles)[:, None], np.zeros((K, 1))))
-            pts = np.matmul(rotation_matrix, pts.T).T
-            pts_list.append(pts)
-
-        if num is not None:
-            return np.asarray(pts_list)
-        else:
-            return pts_list
 
     def interp_line(self, lines, num=None, resolution=0.01):
         distorted = lines.reshape(-1, 2)

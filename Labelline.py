@@ -31,6 +31,7 @@ class MainWindow(QMainWindow):
         self.coeff_file = cfg.coeff_file
         self.camera = None
         self.decimal_precision = cfg.decimal_precision
+        self.default_image_size = cfg.default_image_size
 
         # Parameters
         self.scale = cfg.init_scale
@@ -39,7 +40,6 @@ class MainWindow(QMainWindow):
         self.point_radius = cfg.point_radius
         self.point_select_thresh = 2 * self.point_radius if cfg.point_select_thresh is None else cfg.point_select_thresh
         self.line_select_thresh = cfg.line_select_thresh
-        self.point_vertical_align_thresh = cfg.point_vertical_align_thresh
         self.patterns = cfg.patterns
 
         # UI
@@ -248,8 +248,16 @@ class MainWindow(QMainWindow):
         self.image = cv2.imread(image_file)
         self.set_camera()
         if os.path.isfile(line_file):
-            self.lines = sio.loadmat(line_file)['lines'].reshape(-1, 2, 2)
+            lines = sio.loadmat(line_file)['lines']
+            if len(lines):
+                self.lines = lines
         self.line_index = len(self.lines) - 1
+
+        if self.default_image_size:
+            scale = min(self.default_image_size[0] / self.image.shape[1],
+                        self.default_image_size[1] / self.image.shape[0])
+            self.scale = np.clip(scale, self.scale_limit[0], self.scale_limit[1])
+            self.text_zoom.setText(f'{int(round(self.scale * 100))}%')
 
         # Update UI
         self.plot()
@@ -313,7 +321,9 @@ class MainWindow(QMainWindow):
         self.image = cv2.imread(image_file)
         self.set_camera()
         if os.path.isfile(line_file):
-            self.lines = sio.loadmat(line_file)['lines'].reshape(-1, 2, 2)
+            lines = sio.loadmat(line_file)['lines']
+            if len(lines):
+                self.lines = lines
         self.line_index = len(self.lines) - 1
 
         # Update UI
@@ -346,7 +356,9 @@ class MainWindow(QMainWindow):
         self.image = cv2.imread(image_file)
         self.set_camera()
         if os.path.isfile(line_file):
-            self.lines = sio.loadmat(line_file)['lines'].reshape(-1, 2, 2)
+            lines = sio.loadmat(line_file)['lines']
+            if len(lines):
+                self.lines = lines
         self.line_index = len(self.lines) - 1
 
         # Update UI
@@ -473,7 +485,9 @@ class MainWindow(QMainWindow):
         self.image = cv2.imread(image_file)
         self.set_camera()
         if os.path.isfile(line_file):
-            self.lines = sio.loadmat(line_file)['lines'].reshape(-1, 2, 2)
+            lines = sio.loadmat(line_file)['lines']
+            if len(lines):
+                self.lines = lines
         self.line_index = len(self.lines) - 1
 
         # Update UI
@@ -563,8 +577,6 @@ class MainWindow(QMainWindow):
 
             else:
                 self.num_endpoints = 0
-                if abs(pt[0] - self.endpoint[0]) <= self.point_vertical_align_thresh:
-                    pt[0] = self.endpoint[0]
                 if len(self.lines) > 0:
                     pts = self.lines.reshape(-1, 2)
                     dists = np.linalg.norm(pts - pt[None], axis=-1)
