@@ -3,10 +3,10 @@ import os
 import numpy as np
 import glob
 import cv2
+from yacs.config import CfgNode
 import PIL.Image as Image
 import scipy.io as sio
-import argparse
-from yacs.config import CfgNode
+import webbrowser
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
@@ -18,19 +18,19 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # Variables
+        self.n_pts = cfg.n_pts
         self.file_list = []
         self.file_index = 0
         self.num_file = 0
         self.image = None
-        self.lines = np.zeros((0, 2, 2), np.float32)
+        self.lines = np.zeros((0, self.n_pts, 2), np.float32)
         self.line_index = len(self.lines) - 1
         self.endpoint = None
         self.num_endpoints = 0
         self.capture_endpoint = None
-        self.type = cfg.type
-        self.coeff_file = cfg.coeff_file
-        self.camera = None
+        self.camera = cam.Fisheye()
         self.decimal_precision = cfg.decimal_precision
+        self.default_image_size = cfg.default_image_size
 
         # Parameters
         self.scale = cfg.init_scale
@@ -39,7 +39,6 @@ class MainWindow(QMainWindow):
         self.point_radius = cfg.point_radius
         self.point_select_thresh = 2 * self.point_radius if cfg.point_select_thresh is None else cfg.point_select_thresh
         self.line_select_thresh = cfg.line_select_thresh
-        self.point_vertical_align_thresh = cfg.point_vertical_align_thresh
         self.patterns = cfg.patterns
 
         # UI
@@ -169,49 +168,24 @@ class MainWindow(QMainWindow):
 
         self.label_Image.setEnabled(False)
 
-    def set_camera(self):
-        if self.type == 0:
-            self.camera = cam.Pinhole()
-        elif self.type == 1:
-            self.camera = cam.Fisheye()
-        else:
-            self.camera = cam.Spherical((self.image.shape[1], self.image.shape[0]))
-
-        if os.path.isfile(self.coeff_file):
-            self.camera.load_coeff(self.coeff_file)
-        else:
-            image_file = self.file_list[self.file_index]
-            coeff_file = '.'.join(image_file.split('.')[:-1]) + '.yaml'
-            if os.path.isfile(coeff_file):
-                self.camera.load_coeff(coeff_file)
-            elif self.type == 1:
-                print(f'{coeff_file} does not exist!')
-                exit()
-
     def plot(self):
         image = self.image.copy()
         if len(self.lines) > 0:
-            try:
-                lines = self.camera.truncate_line(self.lines)
-            except:
-                lines = self.lines
-            self.camera.insert_line(image, lines, color=[0, 255, 0], thickness=self.line_width)
+            self.camera.insert_line(image, self.lines, color=[0, 255, 0], thickness=self.line_width)
 
-            pts = self.lines.reshape(-1, 2)
+            pts = self.lines[:, [0, -1]].reshape(-1, 2)
             for pt in pts:
                 pt = np.int32(np.round(pt))
                 cv2.circle(image, tuple(pt), radius=self.point_radius, color=[0, 0, 255], thickness=-1)
 
             if self.line_index >= 0 and self.endpoint is None:
-                try:
-                    lines = self.camera.truncate_line(self.lines[self.line_index:self.line_index + 1])
-                except:
-                    lines = self.lines[self.line_index:self.line_index + 1]
+                lines = self.lines[self.line_index:self.line_index + 1]
                 self.camera.insert_line(image, lines, color=[255, 0, 0], thickness=self.line_width)
 
         if self.endpoint is not None:
-            pt = np.int32(np.round(self.endpoint))
-            cv2.circle(image, tuple(pt), radius=self.point_radius, color=[255, 0, 0], thickness=-1)
+            pts = np.int32(np.round(self.endpoint))
+            for pt in pts:
+                cv2.circle(image, tuple(pt), radius=self.point_radius, color=[255, 0, 0], thickness=-1)
 
         if self.capture_endpoint is not None:
             pt = np.int32(np.round(self.capture_endpoint))
@@ -238,7 +212,7 @@ class MainWindow(QMainWindow):
         self.file_list = file_list
         self.file_index = 0
         self.num_file = num_file
-        self.lines = np.zeros((0, 2, 2), np.float32)
+        self.lines = np.zeros((0, self.n_pts, 2), np.float32)
         self.endpoint = None
         self.num_endpoints = 0
         self.capture_endpoint = None
@@ -246,16 +220,23 @@ class MainWindow(QMainWindow):
         image_file = self.file_list[self.file_index]
         line_file = '.'.join(image_file.split('.')[:-1]) + '.mat'
         self.image = cv2.imread(image_file)
-        self.set_camera()
         if os.path.isfile(line_file):
-            self.lines = sio.loadmat(line_file)['lines'].reshape(-1, 2, 2)
+            lines = sio.loadmat(line_file)['lines']
+            if len(lines):
+                self.lines = lines
         self.line_index = len(self.lines) - 1
+
+        if self.default_image_size:
+            scale = min(self.default_image_size[0] / self.image.shape[1],
+                        self.default_image_size[1] / self.image.shape[0])
+            self.scale = np.clip(scale, self.scale_limit[0], self.scale_limit[1])
+            self.text_zoom.setText(f'{int(round(self.scale * 100))}%')
 
         # Update UI
         self.plot()
         self.list_Line.clear()
-        self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
-                                 self.lines.reshape(-1, 4)])
+        self.list_Line.addItems([f'[{line[0, 0]:.3f}, {line[0, 1]:.3f}, {line[-1, 0]:.3f}, {line[-1, 1]:.3f}]'
+                                 for line in self.lines])
         self.list_Line.setCurrentRow(self.line_index)
         self.list_File.clear()
         self.list_File.addItems(self.file_list)
@@ -285,11 +266,7 @@ class MainWindow(QMainWindow):
     def Save_Callback(self):
         image_file = self.file_list[self.file_index]
         line_file = '.'.join(image_file.split('.')[:-1]) + '.mat'
-        if self.camera.coeff:
-            K, D = self.camera.coeff['K'], self.camera.coeff['D']
-            sio.savemat(line_file, {'lines': self.lines, 'K': K, 'D': D})
-        else:
-            sio.savemat(line_file, {'lines': self.lines})
+        sio.savemat(line_file, {'lines': self.lines})
 
         # Update Widget
         self.button_Save.setEnabled(False)
@@ -304,23 +281,24 @@ class MainWindow(QMainWindow):
 
     def Next_Callback(self):
         self.file_index += 1
-        self.lines = np.zeros((0, 2, 2), np.float32)
+        self.lines = np.zeros((0, self.n_pts, 2), np.float32)
         self.endpoint = None
         self.num_endpoints = 0
 
         image_file = self.file_list[self.file_index]
         line_file = '.'.join(image_file.split('.')[:-1]) + '.mat'
         self.image = cv2.imread(image_file)
-        self.set_camera()
         if os.path.isfile(line_file):
-            self.lines = sio.loadmat(line_file)['lines'].reshape(-1, 2, 2)
+            lines = sio.loadmat(line_file)['lines']
+            if len(lines):
+                self.lines = lines
         self.line_index = len(self.lines) - 1
 
         # Update UI
         self.plot()
         self.list_Line.clear()
-        self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
-                                 self.lines.reshape(-1, 4)])
+        self.list_Line.addItems([f'[{line[0, 0]:.3f}, {line[0, 1]:.3f}, {line[-1, 0]:.3f}, {line[-1, 1]:.3f}]'
+                                 for line in self.lines])
         self.list_Line.setCurrentRow(self.line_index)
         self.list_File.setCurrentRow(self.file_index)
 
@@ -337,23 +315,24 @@ class MainWindow(QMainWindow):
 
     def Prev_Callback(self):
         self.file_index -= 1
-        self.lines = np.zeros((0, 2, 2), np.float32)
+        self.lines = np.zeros((0, self.n_pts, 2), np.float32)
         self.endpoint = None
         self.num_endpoints = 0
 
         image_file = self.file_list[self.file_index]
         line_file = '.'.join(image_file.split('.')[:-1]) + '.mat'
         self.image = cv2.imread(image_file)
-        self.set_camera()
         if os.path.isfile(line_file):
-            self.lines = sio.loadmat(line_file)['lines'].reshape(-1, 2, 2)
+            lines = sio.loadmat(line_file)['lines']
+            if len(lines):
+                self.lines = lines
         self.line_index = len(self.lines) - 1
 
         # Update UI
         self.plot()
         self.list_Line.clear()
-        self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
-                                 self.lines.reshape(-1, 4)])
+        self.list_Line.addItems([f'[{line[0, 0]:.3f}, {line[0, 1]:.3f}, {line[-1, 0]:.3f}, {line[-1, 1]:.3f}]'
+                                 for line in self.lines])
         self.list_Line.setCurrentRow(self.line_index)
         self.list_File.setCurrentRow(self.file_index)
 
@@ -397,8 +376,8 @@ class MainWindow(QMainWindow):
         # Update UI
         self.plot()
         self.list_Line.clear()
-        self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
-                                 self.lines.reshape(-1, 4)])
+        self.list_Line.addItems([f'[{line[0, 0]:.3f}, {line[0, 1]:.3f}, {line[-1, 0]:.3f}, {line[-1, 1]:.3f}]'
+                                 for line in self.lines])
         self.list_Line.setCurrentRow(self.line_index)
 
         # Update Widget
@@ -437,23 +416,7 @@ class MainWindow(QMainWindow):
         self.button_ZoomOut.setEnabled(self.scale > self.scale_limit[0])
 
     def Tutorial_Callback(self):
-        QMessageBox.information(self,
-                        'Tutorial',
-                        'Version: 1.0\n'
-                        'Author: lh9171338\n'
-                        'Date: 2020-11-07\n'
-                        'Shortcut (default):\n'
-                        '\tCtrl + O: Select an image folder\n'
-                        '\tCtrl + S: Save the annotations\n'
-                        '\tCtrl + V: Go to the next image\n'
-                        '\tCtrl + B: Go to the previous image\n'
-                        '\tCtrl + C: Create a new annotation\n'
-                        '\tCtrl + D: Delete a selected annotation\n'
-                        '\tCtrl + U: View the tutorial\n'
-                        'Mouse buttons (clicked in the image area): \n'
-                        '\tLeft button: Create a new endpoint\n'
-                        '\tRight button: Create a new annotation',
-                        QMessageBox.Close)
+        webbrowser.open('usage.html')
 
     def ListLine_Callback(self):
         self.line_index = self.list_Line.currentRow()
@@ -464,23 +427,24 @@ class MainWindow(QMainWindow):
 
     def ListFile_Callback(self):
         self.file_index = self.list_File.currentRow()
-        self.lines = np.zeros((0, 2, 2), np.float32)
+        self.lines = np.zeros((0, self.n_pts, 2), np.float32)
         self.endpoint = None
         self.num_endpoints = 0
 
         image_file = self.file_list[self.file_index]
         line_file = '.'.join(image_file.split('.')[:-1]) + '.mat'
         self.image = cv2.imread(image_file)
-        self.set_camera()
         if os.path.isfile(line_file):
-            self.lines = sio.loadmat(line_file)['lines'].reshape(-1, 2, 2)
+            lines = sio.loadmat(line_file)['lines']
+            if len(lines):
+                self.lines = lines
         self.line_index = len(self.lines) - 1
 
         # Update UI
         self.plot()
         self.list_Line.clear()
-        self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
-                                 self.lines.reshape(-1, 4)])
+        self.list_Line.addItems([f'[{line[0, 0]:.3f}, {line[0, 1]:.3f}, {line[-1, 0]:.3f}, {line[-1, 1]:.3f}]'
+                                 for line in self.lines])
         self.list_Line.setCurrentRow(self.line_index)
         self.list_File.setCurrentRow(self.file_index)
 
@@ -511,8 +475,36 @@ class MainWindow(QMainWindow):
     def mouseRelease_Callback(self, event):
         self.capture_endpoint = None
         if event.button() == Qt.RightButton:
-            if self.button_Create.isEnabled():
-                self.Create_Callback()
+            if self.num_endpoints == 0:
+                if self.button_Create.isEnabled():
+                    self.Create_Callback()
+            else:
+                if self.num_endpoints > 2:
+                    line = np.asarray(self.endpoint)
+                    line = self.camera.interp_line(line[None], num=self.n_pts)
+                    self.lines = np.vstack((self.lines, line))
+                    self.line_index = len(self.lines) - 1
+                self.num_endpoints = 0
+                self.endpoint = None
+
+                # Update UI
+                self.plot()
+                self.setCursor(Qt.ArrowCursor)
+                self.list_Line.clear()
+                self.list_Line.addItems([f'[{line[0, 0]:.3f}, {line[0, 1]:.3f}, {line[-1, 0]:.3f}, {line[-1, 1]:.3f}]'
+                                         for line in self.lines])
+                self.list_Line.setCurrentRow(self.line_index)
+
+                # Update Widget
+                self.button_Save.setEnabled(True)
+                self.button_Create.setEnabled(True)
+                self.button_Delete.setEnabled(self.line_index >= 0)
+
+                self.menu_Save.setEnabled(True)
+                self.menu_Create.setEnabled(True)
+                self.menu_Delete.setEnabled(self.line_index >= 0)
+
+                self.list_Line.setEnabled(True)
 
         elif event.button() == Qt.LeftButton:
             width, height = self.image.shape[1], self.image.shape[0]
@@ -547,55 +539,22 @@ class MainWindow(QMainWindow):
                 # Update UI
                 self.plot()
 
-            elif self.num_endpoints == 1:
-                self.num_endpoints = 2
-                if len(self.lines) > 0:
-                    pts = self.lines.reshape(-1, 2)
-                    dists = np.linalg.norm(pts - pt[None], axis=-1)
-                    dist = dists.min()
-                    if dist <= self.point_select_thresh:
-                        index = dists.argmin()
-                        pt = pts[index]
-                self.endpoint = pt
-
-                # Update UI
-                self.plot()
-
             else:
-                self.num_endpoints = 0
-                if abs(pt[0] - self.endpoint[0]) <= self.point_vertical_align_thresh:
-                    pt[0] = self.endpoint[0]
+                self.num_endpoints += 1
                 if len(self.lines) > 0:
-                    pts = self.lines.reshape(-1, 2)
+                    pts = self.lines[:, [0, -1]].reshape(-1, 2)
                     dists = np.linalg.norm(pts - pt[None], axis=-1)
                     dist = dists.min()
                     if dist <= self.point_select_thresh:
                         index = dists.argmin()
                         pt = pts[index]
-
-                line = np.concatenate((self.endpoint[None], pt[None]))
-                self.lines = np.concatenate((self.lines, line[None]))
-                self.line_index = len(self.lines) - 1
-                self.endpoint = None
+                if self.endpoint is None:
+                    self.endpoint = [pt]
+                else:
+                    self.endpoint += [pt]
 
                 # Update UI
                 self.plot()
-                self.setCursor(Qt.ArrowCursor)
-                self.list_Line.clear()
-                self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
-                                         self.lines.reshape(-1, 4)])
-                self.list_Line.setCurrentRow(self.line_index)
-
-                # Update Widget
-                self.button_Save.setEnabled(True)
-                self.button_Create.setEnabled(True)
-                self.button_Delete.setEnabled(self.line_index >= 0)
-
-                self.menu_Save.setEnabled(True)
-                self.menu_Create.setEnabled(True)
-                self.menu_Delete.setEnabled(self.line_index >= 0)
-
-                self.list_Line.setEnabled(True)
 
     def mouseMove_Callback(self, event):
         self.capture_endpoint = None
@@ -611,7 +570,7 @@ class MainWindow(QMainWindow):
             pt = np.array([x, y], np.float32)
             if self.num_endpoints > 0:
                 if len(self.lines) > 0:
-                    pts = self.lines.reshape(-1, 2)
+                    pts = self.lines[:, [0, -1]].reshape(-1, 2)
                     dists = np.linalg.norm(pts - pt[None], axis=-1)
                     dist = dists.min()
                     if dist <= self.point_select_thresh:
@@ -623,19 +582,7 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-t', '--type', type=int, choices=[0, 1, 2],
-                        help='0: pinhole image, 1: fisheye image, 2: spherical image', required=True)
-    parser.add_argument('-c', '--coeff_file', type=str, help='camera distortion coefficients file')
-    opts = parser.parse_args()
-    opts_dict = vars(opts)
-    opts_list = []
-    for key, value in zip(opts_dict.keys(), opts_dict.values()):
-        if value is not None:
-            opts_list.append(key)
-            opts_list.append(value)
     cfg = CfgNode.load_cfg(open('default.yaml'))
-    cfg.merge_from_list(opts_list)
     cfg.freeze()
     print(cfg)
 
