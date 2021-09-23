@@ -217,10 +217,10 @@ class MainWindow(QMainWindow):
             pt = np.int32(np.round(self.capture_endpoint))
             cv2.circle(image, tuple(pt), radius=self.point_select_thresh, color=[255, 0, 255], thickness=-1)
 
-        image = Image.fromarray(image[:, :, ::-1])
-        new_size = (int(round(image.width * self.scale)), int(round(image.height * self.scale)))
-        image = image.resize(new_size, Image.BICUBIC)
-        pixmap = image.toqpixmap()
+        new_size = (int(round(image.shape[1] * self.scale)), int(round(image.shape[0] * self.scale)))
+        image = cv2.resize(image, new_size, cv2.INTER_CUBIC)
+        image = QImage(image.data, image.shape[1], image.shape[0], image.shape[1] * 3, QImage.Format.Format_BGR888)
+        pixmap = QPixmap(image).scaled(new_size[0], new_size[1])
         self.label_Image.setPixmap(pixmap)
 
     def OpenDir_Callback(self):
@@ -256,7 +256,7 @@ class MainWindow(QMainWindow):
         if self.default_image_size:
             scale = min(self.default_image_size[0] / self.image.shape[1],
                         self.default_image_size[1] / self.image.shape[0])
-            self.scale = np.clip(scale, self.scale_limit[0], self.scale_limit[1])
+            self.scale = float(np.clip(scale, self.scale_limit[0], self.scale_limit[1]))
             self.text_zoom.setText(f'{int(round(self.scale * 100))}%')
 
         # Update UI
@@ -427,7 +427,7 @@ class MainWindow(QMainWindow):
         self.list_File.setEnabled(False)
 
     def ZoomIn_Callback(self):
-        self.scale = np.round(self.scale + 0.1, decimals=1)
+        self.scale = float(np.round(self.scale + 0.1, decimals=1))
 
         # Update UI
         self.plot()
@@ -438,7 +438,7 @@ class MainWindow(QMainWindow):
         self.button_ZoomOut.setEnabled(self.scale > self.scale_limit[0])
 
     def ZoomOut_Callback(self):
-        self.scale = np.round(self.scale - 0.1, decimals=1)
+        self.scale = float(np.round(self.scale - 0.1, decimals=1))
 
         # Update UI
         self.plot()
@@ -512,7 +512,7 @@ class MainWindow(QMainWindow):
     def TextZoom_Callback(self):
         text = self.text_zoom.text().strip('%')
         self.scale = np.round(float(text) / 100.0, decimals=1)
-        self.scale = np.clip(self.scale, self.scale_limit[0], self.scale_limit[1])
+        self.scale = float(np.clip(self.scale, self.scale_limit[0], self.scale_limit[1]))
 
         # Update UI
         self.plot()
