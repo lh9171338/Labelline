@@ -3,7 +3,6 @@ import os
 import numpy as np
 import glob
 import cv2
-import PIL.Image as Image
 import scipy.io as sio
 import argparse
 from yacs.config import CfgNode
@@ -40,6 +39,7 @@ class MainWindow(QMainWindow):
         self.point_radius = cfg.point_radius
         self.point_select_thresh = 2 * self.point_radius if cfg.point_select_thresh is None else cfg.point_select_thresh
         self.line_select_thresh = cfg.line_select_thresh
+        self.point_align_thresh = cfg.point_align_thresh
         self.patterns = cfg.patterns
 
         # UI
@@ -59,15 +59,15 @@ class MainWindow(QMainWindow):
         self.menu_Delete = self.menu_Edit.addAction(QIcon('icon/delete.png'), 'Delete')
         self.menu_Tutorial = self.menu_Help.addAction(QIcon('icon/tutorial.png'), 'Tutorial')
 
-        self.button_OpenDir = QPushButton('Open Dir', icon=QIcon('icon/open.png'))
-        self.button_Save = QPushButton('Save', icon=QIcon('icon/save.png'))
-        self.button_Next = QPushButton('Next', icon=QIcon('icon/next.png'))
-        self.button_Prev = QPushButton('Prev', icon=QIcon('icon/prev.png'))
-        self.button_Create = QPushButton('Create', icon=QIcon('icon/create.png'))
-        self.button_Delete = QPushButton('Delete', icon=QIcon('icon/delete.png'))
-        self.button_ZoomIn = QPushButton('Zoom In', icon=QIcon('icon/zoom-in.png'))
-        self.button_ZoomOut = QPushButton('Zoom Out', icon=QIcon('icon/zoom-out.png'))
-        self.text_zoom = QLineEdit('100%', alignment=Qt.AlignCenter)
+        self.button_OpenDir = QPushButton(text='Open Dir', icon=QIcon('icon/open.png'))
+        self.button_Save = QPushButton(text='Save', icon=QIcon('icon/save.png'))
+        self.button_Next = QPushButton(text='Next', icon=QIcon('icon/next.png'))
+        self.button_Prev = QPushButton(text='Prev', icon=QIcon('icon/prev.png'))
+        self.button_Create = QPushButton(text='Create', icon=QIcon('icon/create.png'))
+        self.button_Delete = QPushButton(text='Delete', icon=QIcon('icon/delete.png'))
+        self.button_ZoomIn = QPushButton(text='Zoom In', icon=QIcon('icon/zoom-in.png'))
+        self.button_ZoomOut = QPushButton(text='Zoom Out', icon=QIcon('icon/zoom-out.png'))
+        self.text_zoom = QLineEdit(text='100%', alignment=Qt.AlignCenter)
         self.text_zoom.setValidator(QRegExpValidator(QRegExp('\d+%?')))
         self.text_zoom.setFixedSize(self.button_OpenDir.sizeHint())
         self.buttonLayout = QVBoxLayout()
@@ -84,6 +84,7 @@ class MainWindow(QMainWindow):
         self.centralWidget = QWidget()
 
         self.InitUI(cfg)
+        self.OpenDir_Callback()
 
     def InitUI(self, cfg):
         # Set UI
@@ -169,25 +170,6 @@ class MainWindow(QMainWindow):
 
         self.label_Image.setEnabled(False)
 
-    def set_camera(self):
-        if self.type == 0:
-            self.camera = cam.Pinhole()
-        elif self.type == 1:
-            self.camera = cam.Fisheye()
-        else:
-            self.camera = cam.Spherical((self.image.shape[1], self.image.shape[0]))
-
-        if os.path.isfile(self.coeff_file):
-            self.camera.load_coeff(self.coeff_file)
-        else:
-            image_file = self.file_list[self.file_index]
-            coeff_file = '.'.join(image_file.split('.')[:-1]) + '.yaml'
-            if os.path.isfile(coeff_file):
-                self.camera.load_coeff(coeff_file)
-            elif self.type == 1:
-                print(f'{coeff_file} does not exist!')
-                exit()
-
     def plot(self):
         image = self.image.copy()
         if len(self.lines) > 0:
@@ -223,6 +205,37 @@ class MainWindow(QMainWindow):
         pixmap = QPixmap(image).scaled(new_size[0], new_size[1])
         self.label_Image.setPixmap(pixmap)
 
+    def set_camera(self):
+        if self.type == 0:
+            self.camera = cam.Pinhole()
+        elif self.type == 1:
+            self.camera = cam.Fisheye()
+        else:
+            self.camera = cam.Spherical((self.image.shape[1], self.image.shape[0]))
+
+        if os.path.isfile(self.coeff_file):
+            self.camera.load_coeff(self.coeff_file)
+        else:
+            image_file = self.file_list[self.file_index]
+            coeff_file = '.'.join(image_file.split('.')[:-1]) + '.yaml'
+            if os.path.isfile(coeff_file):
+                self.camera.load_coeff(coeff_file)
+            elif self.type == 1:
+                print(f'{coeff_file} does not exist!')
+                exit()
+
+    def readData(self):
+        image_file = self.file_list[self.file_index]
+        line_file = image_file[:-4] + '.mat'
+        self.image = cv2.imread(image_file)
+        self.lines = np.zeros((0, 2, 2), np.float32)
+        if os.path.isfile(line_file):
+            lines = sio.loadmat(line_file)['lines']
+            if len(lines):
+                self.lines = lines
+        self.line_index = len(self.lines) - 1
+        self.set_camera()
+
     def OpenDir_Callback(self):
         dir = QFileDialog.getExistingDirectory()
         if not os.path.isdir(dir):
@@ -238,20 +251,10 @@ class MainWindow(QMainWindow):
         self.file_list = file_list
         self.file_index = 0
         self.num_file = num_file
-        self.lines = np.zeros((0, 2, 2), np.float32)
         self.endpoint = None
         self.num_endpoints = 0
         self.capture_endpoint = None
-
-        image_file = self.file_list[self.file_index]
-        line_file = '.'.join(image_file.split('.')[:-1]) + '.mat'
-        self.image = cv2.imread(image_file)
-        self.set_camera()
-        if os.path.isfile(line_file):
-            lines = sio.loadmat(line_file)['lines']
-            if len(lines):
-                self.lines = lines
-        self.line_index = len(self.lines) - 1
+        self.readData()
 
         if self.default_image_size:
             scale = min(self.default_image_size[0] / self.image.shape[1],
@@ -261,6 +264,8 @@ class MainWindow(QMainWindow):
 
         # Update UI
         self.plot()
+        self.text_Line.setText(f'Line list: {self.line_index + 1} / {len(self.lines)}')
+        self.text_File.setText(f'File list: {self.file_index + 1} / {self.num_file}')
         self.list_Line.clear()
         self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
                                  self.lines.reshape(-1, 4)])
@@ -279,7 +284,7 @@ class MainWindow(QMainWindow):
         self.button_ZoomOut.setEnabled(self.scale > self.scale_limit[0])
 
         self.menu_Save.setEnabled(False)
-        self.menu_Next.setEnabled(self.file_index < self.num_file)
+        self.menu_Next.setEnabled(self.file_index < self.num_file - 1)
         self.menu_Prev.setEnabled(self.file_index > 0)
         self.menu_Create.setEnabled(True)
         self.menu_Delete.setEnabled(self.line_index >= 0)
@@ -305,7 +310,7 @@ class MainWindow(QMainWindow):
         self.button_Prev.setEnabled(self.file_index > 0)
 
         self.menu_Save.setEnabled(False)
-        self.menu_Next.setEnabled(self.file_index < self.num_file)
+        self.menu_Next.setEnabled(self.file_index < self.num_file - 1)
         self.menu_Prev.setEnabled(self.file_index > 0)
 
         self.list_File.setEnabled(True)
@@ -315,19 +320,12 @@ class MainWindow(QMainWindow):
         self.lines = np.zeros((0, 2, 2), np.float32)
         self.endpoint = None
         self.num_endpoints = 0
-
-        image_file = self.file_list[self.file_index]
-        line_file = '.'.join(image_file.split('.')[:-1]) + '.mat'
-        self.image = cv2.imread(image_file)
-        self.set_camera()
-        if os.path.isfile(line_file):
-            lines = sio.loadmat(line_file)['lines']
-            if len(lines):
-                self.lines = lines
-        self.line_index = len(self.lines) - 1
+        self.readData()
 
         # Update UI
         self.plot()
+        self.text_Line.setText(f'Line list: {self.line_index + 1} / {len(self.lines)}')
+        self.text_File.setText(f'File list: {self.file_index + 1} / {self.num_file}')
         self.list_Line.clear()
         self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
                                  self.lines.reshape(-1, 4)])
@@ -341,7 +339,7 @@ class MainWindow(QMainWindow):
         self.button_Delete.setEnabled(self.line_index >= 0)
 
         self.menu_Save.setEnabled(False)
-        self.menu_Next.setEnabled(self.file_index < self.num_file)
+        self.menu_Next.setEnabled(self.file_index < self.num_file - 1)
         self.menu_Prev.setEnabled(self.file_index > 0)
         self.menu_Delete.setEnabled(self.line_index >= 0)
 
@@ -350,19 +348,12 @@ class MainWindow(QMainWindow):
         self.lines = np.zeros((0, 2, 2), np.float32)
         self.endpoint = None
         self.num_endpoints = 0
-
-        image_file = self.file_list[self.file_index]
-        line_file = '.'.join(image_file.split('.')[:-1]) + '.mat'
-        self.image = cv2.imread(image_file)
-        self.set_camera()
-        if os.path.isfile(line_file):
-            lines = sio.loadmat(line_file)['lines']
-            if len(lines):
-                self.lines = lines
-        self.line_index = len(self.lines) - 1
+        self.readData()
 
         # Update UI
         self.plot()
+        self.text_Line.setText(f'Line list: {self.line_index + 1} / {len(self.lines)}')
+        self.text_File.setText(f'File list: {self.file_index + 1} / {self.num_file}')
         self.list_Line.clear()
         self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
                                  self.lines.reshape(-1, 4)])
@@ -376,7 +367,7 @@ class MainWindow(QMainWindow):
         self.button_Delete.setEnabled(self.line_index >= 0)
 
         self.menu_Save.setEnabled(False)
-        self.menu_Next.setEnabled(self.file_index < self.num_file)
+        self.menu_Next.setEnabled(self.file_index < self.num_file - 1)
         self.menu_Prev.setEnabled(self.file_index > 0)
         self.menu_Delete.setEnabled(self.line_index >= 0)
 
@@ -399,6 +390,7 @@ class MainWindow(QMainWindow):
         self.menu_Create.setEnabled(False)
         self.menu_Delete.setEnabled(False)
 
+        self.text_zoom.setEnabled(False)
         self.list_Line.setEnabled(False)
         self.list_File.setEnabled(False)
 
@@ -408,6 +400,7 @@ class MainWindow(QMainWindow):
 
         # Update UI
         self.plot()
+        self.text_Line.setText(f'Line list: {self.line_index + 1} / {len(self.lines)}')
         self.list_Line.clear()
         self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
                                  self.lines.reshape(-1, 4)])
@@ -438,7 +431,7 @@ class MainWindow(QMainWindow):
         self.button_ZoomOut.setEnabled(self.scale > self.scale_limit[0])
 
     def ZoomOut_Callback(self):
-        self.scale = float(np.round(self.scale - 0.1, decimals=1))
+        self.scale = float(np.round(self.scale + 0.1, decimals=1))
 
         # Update UI
         self.plot()
@@ -473,25 +466,19 @@ class MainWindow(QMainWindow):
 
         # Update UI
         self.plot()
+        self.text_Line.setText(f'Line list: {self.line_index + 1} / {len(self.lines)}')
 
     def ListFile_Callback(self):
         self.file_index = self.list_File.currentRow()
         self.lines = np.zeros((0, 2, 2), np.float32)
         self.endpoint = None
         self.num_endpoints = 0
-
-        image_file = self.file_list[self.file_index]
-        line_file = '.'.join(image_file.split('.')[:-1]) + '.mat'
-        self.image = cv2.imread(image_file)
-        self.set_camera()
-        if os.path.isfile(line_file):
-            lines = sio.loadmat(line_file)['lines']
-            if len(lines):
-                self.lines = lines
-        self.line_index = len(self.lines) - 1
+        self.readData()
 
         # Update UI
         self.plot()
+        self.text_Line.setText(f'Line list: {self.line_index + 1} / {len(self.lines)}')
+        self.text_File.setText(f'File list: {self.file_index + 1} / {self.num_file}')
         self.list_Line.clear()
         self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
                                  self.lines.reshape(-1, 4)])
@@ -576,6 +563,10 @@ class MainWindow(QMainWindow):
                 self.plot()
 
             else:
+                if np.abs(self.endpoint[0] - pt[0]) <= self.point_align_thresh:
+                    pt[0] = self.endpoint[0]
+                if np.abs(self.endpoint[1] - pt[1]) <= self.point_align_thresh:
+                    pt[1] = self.endpoint[1]
                 self.num_endpoints = 0
                 if len(self.lines) > 0:
                     pts = self.lines.reshape(-1, 2)
@@ -593,6 +584,8 @@ class MainWindow(QMainWindow):
                 # Update UI
                 self.plot()
                 self.setCursor(Qt.ArrowCursor)
+                self.text_Line.setText(f'Line list: {self.line_index + 1} / {len(self.lines)}')
+                self.text_File.setText(f'File list: {self.file_index + 1} / {self.num_file}')
                 self.list_Line.clear()
                 self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
                                          self.lines.reshape(-1, 4)])
@@ -607,6 +600,7 @@ class MainWindow(QMainWindow):
                 self.menu_Create.setEnabled(True)
                 self.menu_Delete.setEnabled(self.line_index >= 0)
 
+                self.text_zoom.setEnabled(True)
                 self.list_Line.setEnabled(True)
 
     def mouseMove_Callback(self, event):
