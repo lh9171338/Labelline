@@ -1,10 +1,10 @@
-type: 0  # 0: pinhole image, 1: fisheye image, 2: spherical image
-coeff_file: ''
+image_folder: 'images'
+label_folder: 'lines'
 patterns: ['*.png', '*.jpg']
 
 # Parameters
 decimal_precision: 3
-init_scale: 1.0
+init_scale: 0.0
 scale_limit: [0.5, 4.0]
 line_width: 2
 point_radius: 4
@@ -21,4 +21,5 @@ menu_Next_shortcut: 'Ctrl+V'
 menu_Prev_shortcut: 'Ctrl+B'
 menu_Create_shortcut: 'Ctrl+C'
 menu_Delete_shortcut: 'Ctrl+D'
+menu_Transform_shortcut: 'Ctrl+W'
 menu_Tutorial_shortcut: 'Ctrl+U'
