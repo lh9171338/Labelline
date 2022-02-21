@@ -145,7 +145,7 @@ class Pinhole(Camera):
 
         return undistorted
 
-    def interp_line(self, lines, num=None, resolution=0.01):
+    def interp_line(self, lines, num=None, resolution=0.1):
         distorted = lines.reshape(-1, 2)
         undistorted = self.undistort_point(distorted)
         lines = undistorted.reshape(-1, 2, 2)
@@ -282,7 +282,7 @@ class Spherical(Camera):
 
         return undistorted
 
-    def interp_line(self, lines, num=None, resolution=0.01):
+    def interp_line(self, lines, num=None, resolution=0.1):
         distorted = lines.reshape(-1, 2)
         undistorted = self.undistort_point(distorted)
         arcs = undistorted.reshape(-1, 2, 3)

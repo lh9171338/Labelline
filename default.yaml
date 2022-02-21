@@ -1,10 +1,13 @@
 type: 0  # 0: pinhole image, 1: fisheye image, 2: spherical image
 coeff_file: ''
+image_folder: '.'
+label_folder: '.'
+coeff_folder: '.'
 patterns: ['*.png', '*.jpg']
 
 # Parameters
 decimal_precision: 3
-init_scale: 1.0
+init_scale: 0.0
 scale_limit: [0.5, 4.0]
 line_width: 2
 point_radius: 4
