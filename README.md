@@ -14,6 +14,21 @@ This repository contains a line segment annotation tool, which is implemented wi
 * PyQt5
 * numpy, glob, cv2, PIL, scipy, argparse, yacs, logging
 
+## Dataset structure
+
+    |-- dataset  
+        |-- data-01  
+            |-- images  
+                |-- 000001.png  
+                |-- 000002.png  
+                |-- ...  
+            |-- labels  
+                |-- 000001.mat  
+                |-- 000002.mat  
+                |-- ...  
+        |-- data-02  
+        |-- ...  
+    
 ## Usage
 ```
 python Labelline.py
