@@ -5,7 +5,7 @@ This repository contains a line segment annotation tool, which is implemented wi
 ## UI
 
 <p align="center">
-    <img src="https://github.com/lh9171338/Labelline/blob/main/UI.png"/>
+    <img src="UI.png"/>
 </p> 
 
 ## Requirements
