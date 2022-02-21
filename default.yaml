@@ -1,5 +1,5 @@
 image_folder: 'images'
-label_folder: 'lines'
+label_folder: 'labels'
 patterns: ['*.png', '*.jpg']
 
 # Parameters
