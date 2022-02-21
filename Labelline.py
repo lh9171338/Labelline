@@ -293,7 +293,7 @@ class MainWindow(QMainWindow):
         if not data_path:
             data_path = QFileDialog.getExistingDirectory()
         image_path = os.path.join(data_path, self.image_folder)
-        if not os.path.isdir(image_path):
+        if data_path == '' or not os.path.isdir(image_path):
             return
 
         file_list = []
