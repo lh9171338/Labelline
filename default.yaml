@@ -1,16 +1,16 @@
-image_folder: 'images'
-label_folder: 'labels'
+n_pts: 5
+image_folder: '.'
+label_folder: '.'
 patterns: ['*.png', '*.jpg']
 
 # Parameters
 decimal_precision: 3
-init_scale: 0.0
+init_scale: 1.0
 scale_limit: [0.5, 4.0]
-line_width: 2
+line_width: 1
 point_radius: 4
 point_select_thresh: 6
 line_select_thresh: 5
-point_align_thresh: 2
 window_size: [1920, 1080]
 default_image_size: [1024, 1024]
 
@@ -21,5 +21,4 @@ menu_Next_shortcut: 'Ctrl+V'
 menu_Prev_shortcut: 'Ctrl+B'
 menu_Create_shortcut: 'Ctrl+C'
 menu_Delete_shortcut: 'Ctrl+D'
-menu_Transform_shortcut: 'Ctrl+W'
 menu_Tutorial_shortcut: 'Ctrl+U'

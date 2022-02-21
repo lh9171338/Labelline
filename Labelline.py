@@ -18,6 +18,7 @@ class MainWindow(QMainWindow):
 
         # Variables
         logging.basicConfig(level=logging.DEBUG)
+        self.n_pts = cfg.n_pts
         self.data_path = None
         self.image_folder = cfg.image_folder
         self.label_folder = cfg.label_folder
@@ -25,16 +26,16 @@ class MainWindow(QMainWindow):
         self.file_index = 0
         self.num_file = 0
         self.image = None
-        self.lines = np.zeros((0, 2, 2), np.float32)
+        self.lines = np.zeros((0, self.n_pts, 2), np.float32)
         self.line_index = len(self.lines) - 1
-        self.label_endpoint = None
+        self.label_endpoint = []
         self.capture_endpoint = None
 
         self.save_flag = True
         self.transform_flag = False
         self.label_flag = False
 
-        self.camera = cam.Pinhole()
+        self.camera = cam.Fisheye()
         self.decimal_precision = cfg.decimal_precision
         self.default_image_size = cfg.default_image_size
 
@@ -45,7 +46,6 @@ class MainWindow(QMainWindow):
         self.point_radius = cfg.point_radius
         self.point_select_thresh = 2 * self.point_radius if cfg.point_select_thresh is None else cfg.point_select_thresh
         self.line_select_thresh = cfg.line_select_thresh
-        self.point_align_thresh = cfg.point_align_thresh
         self.patterns = cfg.patterns
 
         # UI
@@ -63,9 +63,6 @@ class MainWindow(QMainWindow):
         self.menu_Create = self.menu_Edit.addAction(QIcon('icon/create.png'), 'Create')
         self.menu_Edit.addSeparator()
         self.menu_Delete = self.menu_Edit.addAction(QIcon('icon/delete.png'), 'Delete')
-        self.menu_Edit.addSeparator()
-        self.menu_Transform = self.menu_Edit.addAction(QIcon('icon/transform.png'), 'Transform')
-        self.menu_Edit.addSeparator()
         self.menu_Tutorial = self.menu_Help.addAction(QIcon('icon/tutorial.png'), 'Tutorial')
 
         self.button_OpenDir = QPushButton(text='Open Dir', icon=QIcon('icon/open.png'))
@@ -140,7 +137,6 @@ class MainWindow(QMainWindow):
         self.menu_Prev.triggered.connect(self.Prev_Callback)
         self.menu_Create.triggered.connect(self.Create_Callback)
         self.menu_Delete.triggered.connect(self.Delete_Callback)
-        self.menu_Transform.triggered.connect(self.Transform_Callback)
         self.menu_Tutorial.triggered.connect(self.Tutorial_Callback)
 
         self.menu_OpenDir.setShortcut(cfg.menu_OpenDir_shortcut)
@@ -149,7 +145,6 @@ class MainWindow(QMainWindow):
         self.menu_Prev.setShortcut(cfg.menu_Prev_shortcut)
         self.menu_Create.setShortcut(cfg.menu_Create_shortcut)
         self.menu_Delete.setShortcut(cfg.menu_Delete_shortcut)
-        self.menu_Transform.setShortcut(cfg.menu_Transform_shortcut)
         self.menu_Tutorial.setShortcut(cfg.menu_Tutorial_shortcut)
 
         self.list_Line.clicked.connect(self.ListLine_Callback)
@@ -184,28 +179,27 @@ class MainWindow(QMainWindow):
         self.menu_Prev.setEnabled(False)
         self.menu_Create.setEnabled(False)
         self.menu_Delete.setEnabled(False)
-        self.menu_Transform.setEnabled(False)
 
         self.label_Image.setEnabled(False)
 
     def image_update(self):
         image = self.image.copy()
         if len(self.lines) > 0:
-            lines = self.lines
-            self.camera.insert_line(image, lines, color=[0, 255, 0], thickness=self.line_width)
+            self.camera.insert_line(image, self.lines, color=[0, 255, 0], thickness=self.line_width)
 
-            pts = self.lines.reshape(-1, 2)
+            pts = self.lines[:, [0, -1]].reshape(-1, 2)
             for pt in pts:
                 pt = np.int32(np.round(pt))
                 cv2.circle(image, tuple(pt), radius=self.point_radius, color=[0, 0, 255], thickness=-1)
 
-            if self.line_index >= 0 and self.label_endpoint is None:
+            if self.line_index >= 0 and len(self.label_endpoint) == 0:
                 lines = self.lines[self.line_index:self.line_index + 1]
                 self.camera.insert_line(image, lines, color=[255, 0, 0], thickness=self.line_width)
 
-        if self.label_endpoint is not None:
-            pt = np.int32(np.round(self.label_endpoint))
-            cv2.circle(image, tuple(pt), radius=self.point_radius, color=[255, 0, 0], thickness=-1)
+        if len(self.label_endpoint):
+            pts = np.int32(np.round(self.label_endpoint))
+            for pt in pts:
+                cv2.circle(image, tuple(pt), radius=self.point_radius, color=[255, 0, 0], thickness=-1)
 
         if self.capture_endpoint is not None:
             pt = np.int32(np.round(self.capture_endpoint))
@@ -217,15 +211,9 @@ class MainWindow(QMainWindow):
         pixmap = QPixmap(image).scaled(new_size[0], new_size[1])
         self.label_Image.setPixmap(pixmap)
 
-    def transform(self):
-        # Todo: add your code
-        if self.transform_flag:
-            for i in range(3):
-                self.image[:, :, i] = cv2.equalizeHist(self.image[:, :, i])
-
     def data_update(self):
         self.label_flag = False
-        self.label_endpoint = None
+        self.label_endpoint = []
         self.capture_endpoint = None
 
         image_file = self.file_list[self.file_index]
@@ -238,14 +226,12 @@ class MainWindow(QMainWindow):
             logging.error('Image must not be None')
             exit()
 
-        self.lines = np.zeros((0, 2, 2), np.float32)
+        self.lines = np.zeros((0, self.n_pts, 2), np.float32)
         if os.path.isfile(line_file):
             lines = sio.loadmat(line_file)['lines']
             if len(lines):
                 self.lines = lines
         self.line_index = len(self.lines) - 1
-
-        self.transform()
 
     def widget_update(self):
         # Update Widget
@@ -267,16 +253,15 @@ class MainWindow(QMainWindow):
         self.menu_Prev.setEnabled(self.save_flag and self.file_index > 0)
         self.menu_Create.setEnabled(True)
         self.menu_Delete.setEnabled(self.line_index >= 0)
-        self.menu_Transform.setEnabled(True)
 
         self.label_Image.setEnabled(True)
 
     def line_update(self):
-        self.label_endpoint = None
+        self.label_endpoint = []
         self.text_Line.setText(f'Line list: {self.line_index + 1} / {len(self.lines)}')
         self.list_Line.clear()
-        self.list_Line.addItems([f'[{line[0]:.3f}, {line[1]:.3f}, {line[2]:.3f}, {line[3]:.3f}]' for line in
-                                 self.lines.reshape(-1, 4)])
+        self.list_Line.addItems([f'[{line[0, 0]:.3f}, {line[0, 1]:.3f}, {line[-1, 0]:.3f}, {line[-1, 1]:.3f}]'
+                                 for line in self.lines])
         self.list_Line.setCurrentRow(self.line_index)
         self.list_Line.setEnabled(len(self.lines) > 0)
 
@@ -374,13 +359,6 @@ class MainWindow(QMainWindow):
         self.line_update()
         self.image_update()
 
-    def Transform_Callback(self):
-        self.Save_Callback()
-
-        self.transform_flag = not self.transform_flag
-        self.data_update()
-        self.image_update()
-
     def ZoomIn_Callback(self):
         self.scale = float(np.round(self.scale + 0.1, decimals=1))
         self.zoom_update()
@@ -404,7 +382,7 @@ class MainWindow(QMainWindow):
                 self.Create_Callback()
             else:
                 self.label_flag = False
-                self.label_endpoint = None
+                self.label_endpoint = []
                 self.capture_endpoint = None
                 self.setCursor(Qt.ArrowCursor)
                 self.widget_update()
@@ -426,27 +404,23 @@ class MainWindow(QMainWindow):
 
             pt = np.array([x, y], np.float32)
             if self.label_flag:
-                if self.label_endpoint is None:
+                if len(self.label_endpoint) < self.n_pts - 1:
                     if self.capture_endpoint is not None:
-                        self.label_endpoint = self.capture_endpoint
+                        pt = self.capture_endpoint
                         self.capture_endpoint = None
-                    else:
-                        self.label_endpoint = pt
+                    self.label_endpoint += [pt]
 
                     # Update UI
                     self.image_update()
 
                 else:
-                    if np.abs(self.label_endpoint[0] - pt[0]) <= self.point_align_thresh:
-                        pt[0] = self.label_endpoint[0]
-                    if np.abs(self.label_endpoint[1] - pt[1]) <= self.point_align_thresh:
-                        pt[1] = self.label_endpoint[1]
                     self.label_flag = False
                     if self.capture_endpoint is not None:
                         pt = self.capture_endpoint
                         self.capture_endpoint = None
+                    self.label_endpoint += [pt]
 
-                    line = np.stack((self.label_endpoint, pt))
+                    line = np.vstack(self.label_endpoint)
                     self.lines = np.concatenate((self.lines, line[None]))
                     self.line_index = len(self.lines) - 1
 
@@ -478,7 +452,7 @@ class MainWindow(QMainWindow):
     def mouseMove_Callback(self, event):
         last_capture_endpoint = self.capture_endpoint
         self.capture_endpoint = None
-        if self.label_flag and len(self.lines) > 0:
+        if self.label_flag and len(self.lines) > 0 and len(self.label_endpoint) in [0, self.n_pts - 1]:
             width, height = self.image.shape[1], self.image.shape[0]
             image_width = int(round(width * self.scale))
             image_height = int(round(height * self.scale))
