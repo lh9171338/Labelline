@@ -65,7 +65,6 @@ class MainWindow(QMainWindow):
         self.menu_Delete = self.menu_Edit.addAction(QIcon('icon/delete.png'), 'Delete')
         self.menu_Edit.addSeparator()
         self.menu_Transform = self.menu_Edit.addAction(QIcon('icon/transform.png'), 'Transform')
-        self.menu_Edit.addSeparator()
         self.menu_Tutorial = self.menu_Help.addAction(QIcon('icon/tutorial.png'), 'Tutorial')
 
         self.button_OpenDir = QPushButton(text='Open Dir', icon=QIcon('icon/open.png'))
