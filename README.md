@@ -16,20 +16,18 @@ This repository contains a line segment annotation tool, which is implemented wi
 
 ## Dataset structure
 
-    |-- dataset  
-        |-- data-01  
-            |-- images  
-                |-- 000001.png  
-                |-- 000002.png  
-                |-- ...  
-            |-- labels  
-                |-- 000001.mat  
-                |-- 000002.mat  
-                |-- ...  
-        |-- data-02  
-        |-- ...  
+    |-- dataset
+        |-- <image folder>  
+            |-- 000001.png  
+            |-- 000002.png  
+            |-- ...  
+        |-- <label folder>   
+            |-- 000001.mat  
+            |-- 000002.mat  
+            |-- ...
     
 ## Usage
 ```
 python Labelline.py
 ```
+Please refer to [Usage.md](Usage.md) for more usage information.
