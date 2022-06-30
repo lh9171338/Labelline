@@ -16,41 +16,22 @@ This repository contains a line segment annotation tool for pinhole, fisheye, an
 
 ## Dataset structure
 
-    |-- dataset  
-        |-- data-01  
-            |-- images  
-                |-- 000001.png  
-                |-- 000002.png  
-                |-- ...  
-            |-- labels  
-                |-- 000001.mat  
-                |-- 000002.mat  
-                |-- ...  
-            |-- coeffs
-                |-- 000001.yaml
-                |-- 000002.yaml  
-                |-- ...  
-        |-- data-02  
-        |-- ...
-
-    or
-
-    |-- dataset  
-        |-- data-01
+    |-- dataset   
+        |-- <image folder>
             |-- 000001.png  
-            |-- 000001.mat  
-            |-- 000001.yaml
             |-- 000002.png  
+            |-- ...  
+        |-- <label folder>  
+            |-- 000001.mat  
             |-- 000002.mat  
-            |-- 000002.yaml
-            |-- 000003.png  
-            |-- 000003.mat  
-            |-- 000003.yaml
+            |-- ...  
+        |-- <coeff folder>
+            |-- 000001.yaml
+            |-- 000002.yaml  
             |-- ...
-        |-- data-02  
-        |-- ...
 
 ## Usage
 ```
 python Labelline.py --type <image type> [--coeff_file <coeff image>]
 ```
+Please refer to [Usage.html](Usage.html) for more usage information.
