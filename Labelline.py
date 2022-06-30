@@ -487,10 +487,9 @@ class MainWindow(QMainWindow):
                         '\tCtrl + B: Go to the previous image\n'
                         '\tCtrl + C: Create a new annotation\n'
                         '\tCtrl + D: Delete the selected annotation\n'
-                        '\tCtrl + W: Transform\n'
                         '\tCtrl + U: View the tutorial\n'
                         'Mouse buttons (clicked in the image area): \n'
-                        '\tLeft button: Create a new label_endpoint\n'
+                        '\tLeft button: Create an endpoint of a new annotation\n'
                         '\tRight button: Create a new annotation',
                         QMessageBox.Close)
 

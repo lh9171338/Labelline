@@ -14,7 +14,20 @@ This repository contains a fisheye image line segment annotation tool (without t
 * PyQt5
 * numpy, glob, cv2, PIL, scipy, yacs, logging
 
+## Dataset structure
+
+    |-- dataset
+        |-- <image folder>  
+            |-- 000001.png  
+            |-- 000002.png  
+            |-- ...  
+        |-- <label folder>   
+            |-- 000001.mat  
+            |-- 000002.mat  
+            |-- ...
+
 ## Usage
 ```
 python Labelline.py
 ```
+Please refer to [Usage.md](Usage.md) for more usage information.
