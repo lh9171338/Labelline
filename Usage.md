@@ -46,9 +46,9 @@
 
 **注**：`<image folder>`和`<label folder>`路径在`default.yaml`文件中配置，二者可以相同
 
-标注图像由图像图像和事件帧沿水平方向拼接而成，示例如下：
+标注图像由普光图像和事件帧沿水平方向拼接而成，示例如下：
 <p align="center">
-    <img src="000001.png"/>
+    <img width="70%" src="000001.png"/>
 </p> 
 
 ### 程序运行
