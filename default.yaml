@@ -1,10 +1,10 @@
-image_folder: 'images'
-label_folder: 'labels'
+image_folder: 'images-event'
+label_folder: 'lines'
 patterns: ['*.png', '*.jpg']
 
 # Parameters
 decimal_precision: 3
-init_scale: 0.0
+init_scale: 1.4
 scale_limit: [0.5, 4.0]
 line_width: 2
 point_radius: 4
@@ -22,4 +22,5 @@ menu_Prev_shortcut: 'Ctrl+B'
 menu_Create_shortcut: 'Ctrl+C'
 menu_Delete_shortcut: 'Ctrl+D'
 menu_Transform_shortcut: 'Ctrl+W'
+menu_Exchange_shortcut: 'Ctrl+Q'
 menu_Tutorial_shortcut: 'Ctrl+U'

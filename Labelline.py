@@ -25,6 +25,7 @@ class MainWindow(QMainWindow):
         self.file_index = 0
         self.num_file = 0
         self.image = None
+        self.auxiliary_image = None
         self.lines = np.zeros((0, 2, 2), np.float32)
         self.line_index = len(self.lines) - 1
         self.label_endpoint = None
@@ -32,6 +33,7 @@ class MainWindow(QMainWindow):
 
         self.save_flag = True
         self.transform_flag = False
+        self.move_flag = 0
         self.label_flag = False
 
         self.camera = cam.Pinhole()
@@ -65,6 +67,8 @@ class MainWindow(QMainWindow):
         self.menu_Delete = self.menu_Edit.addAction(QIcon('icon/delete.png'), 'Delete')
         self.menu_Edit.addSeparator()
         self.menu_Transform = self.menu_Edit.addAction(QIcon('icon/transform.png'), 'Transform')
+        self.menu_Edit.addSeparator()
+        self.menu_Exchange = self.menu_Edit.addAction(QIcon('icon/exchange.png'), 'Exchange')
         self.menu_Tutorial = self.menu_Help.addAction(QIcon('icon/tutorial.png'), 'Tutorial')
 
         self.button_OpenDir = QPushButton(text='Open Dir', icon=QIcon('icon/open.png'))
@@ -80,7 +84,8 @@ class MainWindow(QMainWindow):
         self.text_zoom.setFixedSize(self.button_OpenDir.sizeHint())
         self.buttonLayout = QVBoxLayout()
         self.label_Image = QLabel()
-        self.imageLayout = QVBoxLayout()
+        self.label_AuxiliaryImage = QLabel()
+        self.imageLayout = QHBoxLayout()
 
         self.text_Line = QLabel('Line list')
         self.text_File = QLabel('File list')
@@ -108,6 +113,7 @@ class MainWindow(QMainWindow):
         self.buttonLayout.addWidget(self.button_ZoomIn)
         self.buttonLayout.addWidget(self.button_ZoomOut)
         self.imageLayout.addWidget(self.label_Image, Qt.AlignCenter)
+        self.imageLayout.addWidget(self.label_AuxiliaryImage, Qt.AlignCenter)
         self.listLayout.addWidget(self.text_Line)
         self.listLayout.addWidget(self.list_Line)
         self.listLayout.addWidget(self.text_File)
@@ -140,6 +146,7 @@ class MainWindow(QMainWindow):
         self.menu_Create.triggered.connect(self.Create_Callback)
         self.menu_Delete.triggered.connect(self.Delete_Callback)
         self.menu_Transform.triggered.connect(self.Transform_Callback)
+        self.menu_Exchange.triggered.connect(self.Exchange_Callback)
         self.menu_Tutorial.triggered.connect(self.Tutorial_Callback)
 
         self.menu_OpenDir.setShortcut(cfg.menu_OpenDir_shortcut)
@@ -149,6 +156,7 @@ class MainWindow(QMainWindow):
         self.menu_Create.setShortcut(cfg.menu_Create_shortcut)
         self.menu_Delete.setShortcut(cfg.menu_Delete_shortcut)
         self.menu_Transform.setShortcut(cfg.menu_Transform_shortcut)
+        self.menu_Exchange.setShortcut(cfg.menu_Exchange_shortcut)
         self.menu_Tutorial.setShortcut(cfg.menu_Tutorial_shortcut)
 
         self.list_Line.clicked.connect(self.ListLine_Callback)
@@ -184,11 +192,84 @@ class MainWindow(QMainWindow):
         self.menu_Create.setEnabled(False)
         self.menu_Delete.setEnabled(False)
         self.menu_Transform.setEnabled(False)
+        self.menu_Exchange.setEnabled(False)
 
         self.label_Image.setEnabled(False)
 
-    def image_update(self):
+    def data_update(self):
+        self.label_flag = False
+        self.label_endpoint = None
+        self.capture_endpoint = None
+
+        image_file = self.file_list[self.file_index]
+        filename = os.path.basename(image_file)
+        filename = os.path.splitext(filename)[0] + '.mat'
+        line_file = os.path.join(self.data_path, self.label_folder, filename)
+
+        image = cv2.imread(image_file)
+        if image is None:
+            logging.error('Image must not be None')
+            exit()
+        width, height = image.shape[1] // 2, image.shape[0]
+        self.image = image[:, :width]
+        self.auxiliary_image = image[:, width:]
+
+        self.lines = np.zeros((0, 2, 2), np.float32)
+        if os.path.isfile(line_file):
+            lines = sio.loadmat(line_file)['lines']
+            if len(lines):
+                # 去除长度为0的线段
+                mask = np.linalg.norm(lines[:, 1] - lines[:, 0], axis=-1) > 0
+                lines = lines[mask]
+
+                # 合并相同的端点
+                juncs = np.unique(np.vstack((lines[:, 1], lines[:, 0])), axis=0)
+                jids = {}
+                for id, junc in enumerate(juncs):
+                    jids[tuple(junc)] = id
+                dists = np.linalg.norm(juncs[:, None] - juncs[None], axis=-1)
+                indices = np.argwhere(dists < self.point_select_thresh)
+                mask = indices[:, 0] < indices[:, 1]
+                indices = indices[mask]
+                if len(indices):
+                    print(os.path.basename(line_file))
+                    for i, j in indices:
+                        junc_i = juncs[i]
+                        junc_j = juncs[j]
+                        jids[tuple(junc_j)] = jids[tuple(junc_i)]
+                for i in range(len(lines)):
+                    id1 = jids[tuple(lines[i, 0])]
+                    id2 = jids[tuple(lines[i, 1])]
+                    lines[i, 0] = juncs[id1]
+                    lines[i, 1] = juncs[id2]
+
+                # 限制线段端点范围
+                lines[:, :, 0] = np.clip(lines[:, :, 0], 0, width - 1e-4)
+                lines[:, :, 1] = np.clip(lines[:, :, 1], 0, height - 1e-4)
+
+                self.lines = lines
+                self.Save_Callback()
+            else:
+                os.remove(line_file)
+        self.line_index = len(self.lines) - 1
+
+    def transform(self):
         image = self.image.copy()
+        auxiliary_image = self.auxiliary_image.copy()
+        if self.transform_flag:
+            for i in range(3):
+                image[:, :, i] = cv2.equalizeHist(image[:, :, i])
+
+        if self.move_flag == 0:
+            return image, auxiliary_image
+        elif self.move_flag == 1:
+            return auxiliary_image, image
+        else:
+            return image, image.copy()
+
+    def image_update(self):
+        image, auxiliary_image = self.transform()
+
         if len(self.lines) > 0:
             lines = self.lines
             self.camera.insert_line(image, lines, color=[0, 255, 0], thickness=self.line_width)
@@ -212,39 +293,16 @@ class MainWindow(QMainWindow):
 
         new_size = (int(round(image.shape[1] * self.scale)), int(round(image.shape[0] * self.scale)))
         image = cv2.resize(image, new_size, cv2.INTER_CUBIC)
-        image = QImage(image.data, image.shape[1], image.shape[0], image.shape[1] * 3, QImage.Format.Format_BGR888)
+        image = QImage(image.data, image.shape[1], image.shape[0], image.shape[1] * 3,
+                       QImage.Format.Format_BGR888)
         pixmap = QPixmap(image).scaled(new_size[0], new_size[1])
         self.label_Image.setPixmap(pixmap)
 
-    def transform(self):
-        # Todo: add your code
-        if self.transform_flag:
-            for i in range(3):
-                self.image[:, :, i] = cv2.equalizeHist(self.image[:, :, i])
-
-    def data_update(self):
-        self.label_flag = False
-        self.label_endpoint = None
-        self.capture_endpoint = None
-
-        image_file = self.file_list[self.file_index]
-        filename = os.path.basename(image_file)
-        filename = os.path.splitext(filename)[0] + '.mat'
-        line_file = os.path.join(self.data_path, self.label_folder, filename)
-
-        self.image = cv2.imread(image_file)
-        if self.image is None:
-            logging.error('Image must not be None')
-            exit()
-
-        self.lines = np.zeros((0, 2, 2), np.float32)
-        if os.path.isfile(line_file):
-            lines = sio.loadmat(line_file)['lines']
-            if len(lines):
-                self.lines = lines
-        self.line_index = len(self.lines) - 1
-
-        self.transform()
+        auxiliary_image = cv2.resize(auxiliary_image, new_size, cv2.INTER_CUBIC)
+        auxiliary_image = QImage(auxiliary_image.data, auxiliary_image.shape[1], auxiliary_image.shape[0],
+                                 auxiliary_image.shape[1] * 3, QImage.Format.Format_BGR888)
+        pixmap = QPixmap(auxiliary_image).scaled(new_size[0], new_size[1])
+        self.label_AuxiliaryImage.setPixmap(pixmap)
 
     def widget_update(self):
         # Update Widget
@@ -265,8 +323,8 @@ class MainWindow(QMainWindow):
         self.menu_Next.setEnabled(self.save_flag and self.file_index < self.num_file - 1)
         self.menu_Prev.setEnabled(self.save_flag and self.file_index > 0)
         self.menu_Create.setEnabled(True)
-        self.menu_Delete.setEnabled(self.line_index >= 0)
         self.menu_Transform.setEnabled(True)
+        self.menu_Exchange.setEnabled(True)
 
         self.label_Image.setEnabled(True)
 
@@ -280,6 +338,7 @@ class MainWindow(QMainWindow):
         self.list_Line.setEnabled(len(self.lines) > 0)
 
         self.button_Delete.setEnabled(len(self.lines) > 0)
+        self.menu_Delete.setEnabled(len(self.lines) > 0)
 
     def zoom_update(self):
         self.text_zoom.setText(f'{int(round(self.scale * 100))}%')
@@ -288,7 +347,6 @@ class MainWindow(QMainWindow):
         self.button_ZoomOut.setEnabled(self.scale > self.scale_limit[0])
 
     def OpenDir_Callback(self, data_path=None):
-        self.Save_Callback()
         if not data_path:
             data_path = QFileDialog.getExistingDirectory()
         image_path = os.path.join(data_path, self.image_folder)
@@ -322,14 +380,15 @@ class MainWindow(QMainWindow):
         self.image_update()
 
     def Save_Callback(self):
-        if self.save_flag:
-            return
         self.save_flag = True
         image_file = self.file_list[self.file_index]
         filename = os.path.basename(image_file)
         filename = os.path.splitext(filename)[0] + '.mat'
         line_file = os.path.join(self.data_path, self.label_folder, filename)
-        sio.savemat(line_file, {'lines': self.lines})
+        if len(self.lines):
+            sio.savemat(line_file, {'lines': self.lines})
+        elif os.path.isfile(line_file):
+            os.remove(line_file)
 
         self.widget_update()
 
@@ -337,18 +396,21 @@ class MainWindow(QMainWindow):
         self.file_index += 1
         self.data_update()
         self.widget_update()
+        self.line_update()
         self.image_update()
 
     def Prev_Callback(self):
         self.file_index -= 1
         self.data_update()
         self.widget_update()
+        self.line_update()
         self.image_update()
 
     def ListFile_Callback(self):
         self.file_index = self.list_File.currentRow()
         self.data_update()
         self.widget_update()
+        self.line_update()
         self.image_update()
 
     def ListLine_Callback(self):
@@ -374,10 +436,11 @@ class MainWindow(QMainWindow):
         self.image_update()
 
     def Transform_Callback(self):
-        self.Save_Callback()
-
         self.transform_flag = not self.transform_flag
-        self.data_update()
+        self.image_update()
+
+    def Exchange_Callback(self):
+        self.move_flag = (self.move_flag + 1) % 3
         self.image_update()
 
     def ZoomIn_Callback(self):
@@ -446,8 +509,12 @@ class MainWindow(QMainWindow):
                         self.capture_endpoint = None
 
                     line = np.stack((self.label_endpoint, pt))
-                    self.lines = np.concatenate((self.lines, line[None]))
-                    self.line_index = len(self.lines) - 1
+                    length = np.linalg.norm(line[1] - line[0], axis=-1)
+                    if length > 0:
+                        self.lines = np.concatenate((self.lines, line[None]))
+                        self.lines[:, :, 0] = np.clip(self.lines[:, :, 0], 0, width - 1e-4)
+                        self.lines[:, :, 1] = np.clip(self.lines[:, :, 1], 0, height - 1e-4)
+                        self.line_index = len(self.lines) - 1
 
                     # Update UI
                     self.save_flag = False
@@ -502,9 +569,9 @@ class MainWindow(QMainWindow):
     def Tutorial_Callback(self):
         QMessageBox.information(self,
                         'Tutorial',
-                        'Version: 2.0\n'
+                        'Version: 1.0\n'
                         'Author: lh9171338\n'
-                        'Date: 2022-02-20\n'
+                        'Date: 2022-06-30\n'
                         'Shortcut (default):\n'
                         '\tCtrl + O: Select an image folder\n'
                         '\tCtrl + S: Save the annotations\n'
@@ -512,7 +579,8 @@ class MainWindow(QMainWindow):
                         '\tCtrl + B: Go to the previous image\n'
                         '\tCtrl + C: Create a new annotation\n'
                         '\tCtrl + D: Delete the selected annotation\n'
-                        '\tCtrl + W: Transform (The default operation is histogram equalization)\n'
+                        '\tCtrl + W: Transform\n'
+                        '\tCtrl + Q: Exchange\n'
                         '\tCtrl + U: View the tutorial\n'
                         'Mouse buttons (clicked in the image area): \n'
                         '\tLeft button: Create an endpoint of a new annotation\n'
