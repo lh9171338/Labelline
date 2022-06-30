@@ -34,4 +34,4 @@ This repository contains a line segment annotation tool for pinhole, fisheye, an
 ```
 python Labelline.py --type <image type> [--coeff_file <coeff image>]
 ```
-Please refer to [Usage.html](Usage.html) for more usage information.
+Please refer to [Usage.md](Usage.md) for more usage information.
