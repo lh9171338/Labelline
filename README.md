@@ -1,30 +1,34 @@
-[<img height="23" src="https://github.com/lh9171338/Outline/blob/master/icon.jpg"/>](https://github.com/lh9171338/Outline) Labelline
+[<img height="23" src="https://raw.githubusercontent.com/lh9171338/Outline/master/icon.jpg"/>](https://github.com/lh9171338/Outline) Labelline
 ===
+
+# Introduction
 This repository contains a fisheye image line segment annotation tool (without the requirement of distortion coefficients), which is implemented with PyQt5.
 
-## UI
+# UI
 
 <p align="center">
-    <img src="UI.png"/>
+    <img width="100%" src="UI.png"/>
 </p> 
 
-## Requirements
+# Requirements
 
-* python3
-* PyQt5
-* numpy, glob, cv2, PIL, scipy, yacs, logging
+```shell
+pip install -r ./requirements.txt
+```
 
 ## Dataset structure
 
-    |-- dataset
-        |-- <image folder>  
-            |-- 000001.png  
-            |-- 000002.png  
-            |-- ...  
-        |-- <label folder>   
-            |-- 000001.mat  
-            |-- 000002.mat  
-            |-- ...
+```shell
+|-- dataset   
+    |-- <image folder>
+        |-- 000001.png  
+        |-- 000002.png  
+        |-- ...  
+    |-- <label folder>  
+        |-- 000001.mat  
+        |-- 000002.mat  
+        |-- ...  
+```
 
 ## Usage
 ```

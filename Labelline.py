@@ -19,7 +19,6 @@ class MainWindow(QMainWindow):
         # Variables
         logging.basicConfig(level=logging.DEBUG)
         self.n_pts = cfg.n_pts
-        self.data_path = None
         self.image_folder = cfg.image_folder
         self.label_folder = cfg.label_folder
         self.file_list = []
@@ -90,7 +89,6 @@ class MainWindow(QMainWindow):
         self.centralWidget = QWidget()
 
         self.InitUI(cfg)
-        self.OpenDir_Callback(data_path=self.data_path)
 
     def InitUI(self, cfg):
         # Set UI
@@ -502,4 +500,5 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow(cfg)
     window.show()
+    window.OpenDir_Callback()
     sys.exit(app.exec_())
